@@ -6,7 +6,7 @@ ssh's `SSH_ASKPASS`. Unknown hosts prompt on the TTY and offer to save.
 ## Setup
 
 ```bash
-./setup-sshm-askpass.sh
+curl -fsSL https://raw.githubusercontent.com/kunshakolime/debian-13-tricks/main/setups/sshm-askpass/setup-sshm-askpass.sh | bash
 ```
 
 Installs (idempotent): `~/.ssh/askpass.sh`, a `host:password` file
