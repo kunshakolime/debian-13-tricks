@@ -6,12 +6,15 @@
 
 set -uo pipefail
 
-SUDOERS_D="/etc/sudoers.d"
-NAME="90-nopasswd-${USER//[^a-zA-Z0-9_-]/_}"
-FILE="$SUDOERS_D/$NAME"
-ENTRY="$USER ALL=(ALL:ALL) NOPASSWD:ALL"
+REAL_USER="${SUDO_USER:-$USER}"
 
-if [ -f "$FILE" ]; then
+SUDOERS_D="/etc/sudoers.d"
+NAME="90-nopasswd-${REAL_USER//[^a-zA-Z0-9_-]/_}"
+FILE="$SUDOERS_D/$NAME"
+ENTRY="$REAL_USER ALL=(ALL:ALL) NOPASSWD:ALL"
+
+# Okuma izni olmayan /etc/sudoers.d dizinindeki dosyayı sudo ile test et
+if sudo test -f "$FILE"; then
     sudo rm -f "$FILE"
     echo "passwordless sudo is now OFF"
 else
