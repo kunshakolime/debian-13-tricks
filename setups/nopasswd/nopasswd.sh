@@ -13,7 +13,6 @@ NAME="90-nopasswd-${REAL_USER//[^a-zA-Z0-9_-]/_}"
 FILE="$SUDOERS_D/$NAME"
 ENTRY="$REAL_USER ALL=(ALL:ALL) NOPASSWD:ALL"
 
-# Okuma izni olmayan /etc/sudoers.d dizinindeki dosyayı sudo ile test et
 if sudo test -f "$FILE"; then
     sudo rm -f "$FILE"
     echo "passwordless sudo is now OFF"
