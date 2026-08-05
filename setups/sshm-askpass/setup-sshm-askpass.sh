@@ -10,6 +10,7 @@
 # password from ~/.ssh/sshm_passwords instead of asking.
 #
 # What it installs:
+#   sshm (if missing)           via the official installer
 #   ~/.ssh/askpass.sh       the SSH_ASKPASS helper (extracts user@host from
 #                           the prompt and greps the password file; also
 #                           resolves sshm aliases -> HostName)
@@ -35,6 +36,15 @@ mkdir -p "$HOME/.ssh"
 chmod 700 "$HOME/.ssh"
 
 log() { printf '\n==> %s\n' "$*"; }
+
+# If sshm is missing, install it using the official installer.
+if command -v sshm >/dev/null 2>&1; then
+    log "sshm already installed: $(sshm --version 2>/dev/null || echo 'unknown version')"
+else
+    log "sshm not found - installing via the official installer..."
+    curl -sSL https://raw.githubusercontent.com/Gu1llaum-3/sshm/main/install/unix.sh | bash
+    log "sshm installed: $(sshm --version 2>/dev/null)"
+fi
 
 cat > "$ASKPASS" <<'SCRIPT'
 #!/bin/bash
