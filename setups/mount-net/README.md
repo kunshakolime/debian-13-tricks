@@ -12,8 +12,8 @@ sudo apt install -y davfs2 cifs-utils sshfs curlftpfs
 sudo curl -fsSL https://raw.githubusercontent.com/kunshakolime/debian-13-tricks/main/setups/mount-net/mount-net -o /usr/local/bin/mount-net && sudo chmod +x /usr/local/bin/mount-net
 ```
 
-Installs the backends (`davfs2`, `cifs-utils`, `sshfs`, `curlftpfs`) plus the
-`mount-net` script to `/usr/local/bin`.
+Installs the backends — `davfs2` (webdav), `cifs-utils` (smb), `sshfs` (sftp),
+`curlftpfs` (ftp) — plus the `mount-net` script to `/usr/local/bin`.
 
 ## Usage
 
