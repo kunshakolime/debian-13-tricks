@@ -271,7 +271,10 @@ main() {
 
     local APT_SOURCES
     APT_SOURCES=$(find_apt_sources) || {
-        echo "apt-sources not found - install it first:" >&2
+        echo "apt-sources not found - you can enable repos manually instead:" >&2
+        echo "  sudo nano /etc/apt/sources.list.d/*.sources   # flip 'Enabled: no' to 'Enabled: yes'" >&2
+        echo "  sudo apt-get update" >&2
+        echo "Or install apt-sources first:" >&2
         echo "  sudo install -m 755 $(dirname "$0")/../setups/apt-sources/apt-sources.sh /usr/local/bin/apt-sources" >&2
         exit 1
     }
