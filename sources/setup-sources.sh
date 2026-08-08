@@ -17,7 +17,7 @@
 # trixie is only written when no enabled trixie source exists yet (stock Debian
 # 13 installs ship debian.sources, so it's skipped); otherwise it's installed
 # the modern way as a deb822 file. Everything else is written with
-# `Enabled: no`, then apt-sources (../apt-sources) runs interactively so you
+# `Enabled: no`, then apt-sources (../setups/apt-sources) runs interactively so you
 # can enable the repos you want. Keyrings are fetched to /etc/apt/keyrings/
 # either way, ready to flip on.
 #
@@ -259,8 +259,8 @@ usage_hints() {
 find_apt_sources() {
     if command -v apt-sources >/dev/null 2>&1; then
         command -v apt-sources
-    elif [ -x "$(dirname "$0")/../apt-sources/apt-sources.sh" ]; then
-        echo "$(dirname "$0")/../apt-sources/apt-sources.sh"
+    elif [ -x "$(dirname "$0")/../setups/apt-sources/apt-sources.sh" ]; then
+        echo "$(dirname "$0")/../setups/apt-sources/apt-sources.sh"
     else
         return 1
     fi
@@ -272,7 +272,7 @@ main() {
     local APT_SOURCES
     APT_SOURCES=$(find_apt_sources) || {
         echo "apt-sources not found - install it first:" >&2
-        echo "  sudo install -m 755 $(dirname "$0")/../apt-sources/apt-sources.sh /usr/local/bin/apt-sources" >&2
+        echo "  sudo install -m 755 $(dirname "$0")/../setups/apt-sources/apt-sources.sh /usr/local/bin/apt-sources" >&2
         exit 1
     }
 
