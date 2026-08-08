@@ -8,21 +8,24 @@ its password in the unit file.
 ## Install
 
 ```bash
+sudo apt install -y davfs2 cifs-utils sshfs curlftpfs
 sudo curl -fsSL https://raw.githubusercontent.com/kunshakolime/debian-13-tricks/main/setups/mount-net/mount-net -o /usr/local/bin/mount-net && sudo chmod +x /usr/local/bin/mount-net
 ```
 
-Requires (per type): `davfs2` (webdav), `cifs-utils` (smb), `sshfs` (sftp),
-`curlftpfs` (ftp).
+Installs the backends (`davfs2`, `cifs-utils`, `sshfs`, `curlftpfs`) plus the
+`mount-net` script to `/usr/local/bin`.
 
 ## Usage
 
 ```bash
-mount-net add webdav                          # interactive
+mount-net add                           # fully interactive — picks type (default
+                                        # webdav), name, source, credentials,
+                                        # mountpoint and mode
 mount-net add sftp user@host:/pub nas1 /mnt/nas1 --user u --pass p
-mount-net status                              # shares + mode + mounted state
-mount-net keep nas1                           # mount at boot, never auto-unmount
-mount-net auto nas1                           # mount on access, idle-unmount (default)
-mount-net mount nas1 / mount-net umount nas1  # now
+mount-net status                        # shares + mode + mounted state
+mount-net keep nas1                     # mount at boot, never auto-unmount
+mount-net auto nas1                     # mount on access, idle-unmount (default)
+mount-net mount nas1 / mount-net umount nas1   # now
 mount-net edit nas1 / mount-net remove nas1
 ```
 
