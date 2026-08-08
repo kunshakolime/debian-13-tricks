@@ -11,7 +11,7 @@ pick what to enable. Trixie is skipped if already configured (stock Debian 13
 ships `debian.sources`); otherwise installed as deb822 `debian.sources`.
 Configs are backed up once (`.debian-tricks.bak`).
 
-Toggle any source later with `apt-sources` (../apt-sources):
+Toggle any source later with `apt-sources` (../setups/apt-sources):
 
 ```bash
 sudo apt-sources                 # interactive
