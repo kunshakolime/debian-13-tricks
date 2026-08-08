@@ -1,0 +1,664 @@
+#!/bin/bash
+# Network share manager — WebDAV (HTTP/HTTPS), FTP/FTPS, Samba (SMB), SFTP.
+#
+#   mount-net add <name>            — add a share (asks a few questions)
+#   mount-net add <type> <source> <name> [mountpoint] [--user u] [--pass p] [--vers v]
+#                                 — one-shot add; type: webdav|ftp|smb|sftp;
+#                                   source: https://..., ftp(s)://..., //server/share,
+#                                   user@host[:path]; mountpoint defaults to /mnt/<name>;
+#                                   anything omitted is prompted
+#   mount-net edit <name>           — change an existing share (url/server/credentials/
+#                                     mount point; a changed mount point moves the share)
+#   mount-net remove <name>         — forget a share (also clears its credentials)
+#   mount-net status                — shares + mode (auto/keep) + mounted state
+#   mount-net mount <name>          — mount now
+#   mount-net umount <name>         — unmount now
+#   mount-net auto <name>           — mount on access, unmount after idle (default)
+#   mount-net keep <name>           — mount at boot, never auto-unmount; if it can't
+#                                     mount right now it's saved anyway (warning shown)
+#
+# Everything is written for you as systemd .mount/.automount units
+# (/mnt/<name>); credentials are stored root-only (ftp embeds its password in
+# the unit file). No config files to hand-edit.
+
+set -e
+
+UNIT_DIR=/etc/systemd/system
+DAV_SECRETS=/etc/davfs2/secrets
+CIFS_CRED_DIR=/etc/cifs-credentials
+IDLE_SEC=300
+
+unit() {
+    local name="$1" f n
+    [ -f "$UNIT_DIR/mnt-$name.mount" ] && { echo "mnt-$name"; return; }
+    for f in "$UNIT_DIR"/*.mount; do
+        [ -f "$f" ] || continue
+        n="$(sed -n 's/^Description=.*network share //p' "$f")"
+        [ "$n" = "$name" ] && { echo "$(basename "$f" .mount)"; return; }
+    done
+    echo "mnt-$name"
+}
+mount_point() { echo "/mnt/$1"; }
+
+mount_loc() {
+    local w
+    w="$(unit_key Where "$UNIT_DIR/$(unit "$1").mount" 2>/dev/null)"
+    echo "${w:-/mnt/$1}"
+}
+
+mp_in_use() {
+    local mp="$1" except="${2:-}" f w n
+    for f in "$UNIT_DIR"/*.mount; do
+        [ -f "$f" ] || continue
+        [ "$(basename "$f")" = "$except" ] && continue
+        w="$(sed -n 's/^Where=//p' "$f")"
+        [ "$w" = "$mp" ] || continue
+        n="$(sed -n 's/^Description=.*network share //p' "$f")"
+        echo "${n:-$(basename "$f")}"
+        return 0
+    done
+    return 1
+}
+
+valid_name() { [[ "$1" =~ ^[a-zA-Z0-9-]+$ ]]; }
+
+bad_secret() {
+    [[ "$1" =~ [[:space:]] ]] || [[ "$1" == *'"'* ]] || [[ "$1" == *'\'* ]] || [[ "$1" == *'#'* ]]
+}
+
+dav_secret_line() {
+    if [ -n "$3" ]; then
+        printf '%s %s %s\n' "$1" "$2" "$3"
+    else
+        printf '%s %s ""\n' "$1" "$2"
+    fi
+}
+
+require_name() {
+    [ -n "$1" ] || { echo "usage: mount-net $CMD <name>"; exit 1; }
+    valid_name "$1" || { echo "invalid name (letters, digits, - only): $1"; exit 1; }
+}
+
+unit_key() {
+    sed -n "s/^$1=//p" "$2"
+}
+
+try_mount() {
+    local u what where fstype opts rc=0
+    u="$(unit "$1")"
+    what="$(unit_key What "$UNIT_DIR/$u.mount")"
+    where="$(unit_key Where "$UNIT_DIR/$u.mount")"
+    fstype="$(unit_key Type "$UNIT_DIR/$u.mount")"
+    opts="$(unit_key Options "$UNIT_DIR/$u.mount")"
+    echo "  running: mount $what $where -t $fstype -o $opts"
+    sudo timeout 20 mount "$what" "$where" -t "$fstype" -o "$opts" < /dev/null 2>&1 || rc=$?
+    if [ "$rc" = "124" ]; then
+        echo "  (timed out after 20s — server not reachable)"
+    fi
+    return "$rc"
+}
+
+share_type() {
+    sed -n 's/^Type=//p' "$UNIT_DIR/$(unit "$1").mount" 2>/dev/null || echo ""
+}
+
+write_units() {
+    local name="$1" type="$2" what="$3" fstype="$4" opts="$5" mp="$6" u
+    [ -n "$mp" ] || mp="$(mount_loc "$name")"
+    u="$(systemd-escape --path --suffix=mount "$mp")"
+    sudo tee "$UNIT_DIR/$u" >/dev/null <<EOF
+[Unit]
+Description=$type network share $name
+
+[Mount]
+What=$what
+Where=$mp
+Type=$fstype
+Options=$opts
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    sudo tee "$UNIT_DIR/${u%.mount}.automount" >/dev/null <<EOF
+[Unit]
+Description=$type network share $name (auto)
+
+[Automount]
+Where=$mp
+TimeoutIdleSec=$IDLE_SEC
+
+[Install]
+WantedBy=multi-user.target
+EOF
+}
+
+warn_mount_failed() {
+    local name="$1"
+    echo
+    echo "WARNING: '$name' is configured, but the first mount FAILED:"
+    try_mount "$name" || true
+    echo
+    if systemctl is-enabled --quiet "$(unit "$name").automount" 2>/dev/null; then
+        echo "It will retry when you access $(mount_loc "$name")."
+    else
+        echo "It stays enabled (will retry at boot); retry now with 'mount-net mount $name'."
+    fi
+    echo
+}
+
+switch_mode() {
+    local name="$1" mode="$2" u
+    u="$(unit "$name")"
+    require_name "$name"
+    case "$mode" in
+        auto)
+            sudo systemctl disable --now "$u.mount" 2>/dev/null || true
+            sudo systemctl enable --now "$u.automount"
+            ;;
+        keep)
+            sudo systemctl disable --now "$u.automount" 2>/dev/null || true
+            sudo systemctl enable --now "$u.mount" 2>&1 || true
+            ;;
+        *)
+            echo "mode must be 'auto' or 'keep'"
+            exit 1
+            ;;
+    esac
+    echo "'$name' -> $(mount_loc "$name") is now $mode"
+}
+
+add() {
+    local type="" source="" name="" user="" pass="" vers="" what="" fstype="" opts="" mp=""
+    local mode_flag="" pos=()
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+            --user) [ "$#" -ge 2 ] || { echo "option --user needs a value"; exit 1; }; user="$2"; shift 2 ;;
+            --pass) [ "$#" -ge 2 ] || { echo "option --pass needs a value"; exit 1; }; pass="$2"; shift 2 ;;
+            --vers) [ "$#" -ge 2 ] || { echo "option --vers needs a value"; exit 1; }; vers="$2"; shift 2 ;;
+            --auto) mode_flag="auto"; shift ;;
+            --keep) mode_flag="keep"; shift ;;
+            -h|--help) usage; exit 0 ;;
+            -*) echo "unknown option: $1"; exit 1 ;;
+            *) pos+=("$1"); shift ;;
+        esac
+    done
+    [ "${#pos[@]}" -le 4 ] || { echo "usage: mount-net add [type] [source] [name] [mountpoint]"; exit 1; }
+    [ "${#pos[@]}" -ge 1 ] && type="${pos[0]}"
+    [ "${#pos[@]}" -ge 2 ] && source="${pos[1]}"
+    [ "${#pos[@]}" -ge 3 ] && name="${pos[2]}"
+    [ "${#pos[@]}" -ge 4 ] && mp="${pos[3]}"
+
+    if [ -n "$type" ]; then
+        case "$type" in webdav|ftp|smb|sftp) ;; *) echo "unknown type: $type"; exit 1 ;; esac
+    else
+        read -rp 'Type (webdav/ftp/smb/sftp) [webdav]: ' type
+        type="${type:-webdav}"
+        case "$type" in webdav|ftp|smb|sftp) ;; *) echo "unknown type: $type"; exit 1 ;; esac
+    fi
+
+    if [ -z "$name" ]; then
+        read -rp 'Name (short label, e.g. nas): ' name
+    fi
+    valid_name "$name" || { echo "invalid name (letters, digits, - only): $name"; exit 1; }
+    [ ! -f "$UNIT_DIR/$(unit "$name").mount" ] || { echo "share '$name' already exists"; exit 1; }
+    if [ -n "$mp" ]; then
+        [[ "$mp" == /* ]] || { echo "invalid mountpoint (must be an absolute path like /mnt/nas): $mp"; exit 1; }
+        if other="$(mp_in_use "$mp")"; then
+            echo "mount point $mp is already used by share '$other'"; exit 1
+        fi
+    fi
+
+    case "$type" in
+        webdav)
+            if [ -n "$source" ]; then
+                case "$source" in
+                    http://*|https://*) what="$source" ;;
+                    *) echo "invalid WebDAV URL (must start with http:// or https://): $source"; exit 1 ;;
+                esac
+            else
+                read -rp 'WebDAV URL (http or https, e.g. https://host/dav): ' what
+                [ -n "$what" ] || { echo "URL required"; exit 1; }
+            fi
+            [ -n "$user" ] || { read -rp 'Username (blank = anonymous): ' user; [ -n "$user" ] || user="anonymous"; }
+            [ -n "$pass" ] || { read -rsp 'Password (blank = none): ' pass; echo; }
+            for v in "$what" "$user" "$pass"; do
+                if bad_secret "$v"; then
+                    echo "error: URL, username and password must not contain spaces, quotes, backslashes or # (davfs2 secrets format)"
+                    exit 1
+                fi
+            done
+            fstype="davfs"
+            opts="uid=$(id -u),gid=$(id -g),_netdev"
+            sudo install -d -m 700 /etc/davfs2
+            sudo tee -a "$DAV_SECRETS" >/dev/null <<EOF
+$(dav_secret_line "$what" "$user" "$pass")
+EOF
+            sudo chmod 600 "$DAV_SECRETS"
+            warn_bad_secrets
+            ;;
+        smb)
+            local server share
+            if [ -n "$source" ]; then
+                server="${source#//}"
+                if [[ "$server" != */* ]]; then
+                    echo "invalid SMB source (use //server/share or server/share): $source"; exit 1
+                fi
+                share="${server#*/}"
+                server="${server%%/*}"
+            else
+                read -rp 'Server (host or IP): ' server
+                read -rp 'Share name: ' share
+            fi
+            [ -n "$user" ] || { read -rp 'Username (blank = guest): ' user; [ -n "$user" ] || user="guest"; }
+            [ -n "$pass" ] || { read -rsp 'Password (blank = none): ' pass; echo; }
+            [ -n "$vers" ] || read -rp 'SMB protocol version (e.g. 1.0, 2.0, 3.0 — blank for auto): ' vers
+            for v in "$server" "$share"; do
+                if bad_secret "$v"; then
+                    echo "error: server and share name must not contain spaces or special characters"
+                    exit 1
+                fi
+            done
+            what="//$server/$share"
+            fstype="cifs"
+            opts="credentials=$CIFS_CRED_DIR/$name,uid=$(id -u),gid=$(id -g),iocharset=utf8,_netdev"
+            [ -n "$vers" ] && opts="$opts,vers=$vers"
+            sudo install -d -m 700 "$CIFS_CRED_DIR"
+            sudo tee "$CIFS_CRED_DIR/$name" >/dev/null <<EOF
+username=$user
+password=$pass
+EOF
+            sudo chmod 600 "$CIFS_CRED_DIR/$name"
+            ;;
+        sftp)
+            local suser rpath
+            if [ -n "$source" ]; then
+                if [[ "$source" == *:* ]]; then
+                    suser="${source%%:*}"
+                    rpath="${source#*:}"
+                    rpath="${rpath:-/home}"
+                else
+                    suser="$source"
+                    rpath="/home"
+                fi
+                [ -n "$suser" ] || { echo "invalid sftp source (use user@host[:path]): $source"; exit 1; }
+            else
+                read -rp 'User@Server (e.g. me@host): ' suser
+                read -rp 'Remote path [/home]: ' rpath
+                rpath="${rpath:-/home}"
+            fi
+            for v in "$suser" "$rpath"; do
+                if bad_secret "$v"; then
+                    echo "error: user@server and remote path must not contain spaces or special characters"
+                    exit 1
+                fi
+            done
+            what="$suser:$rpath"
+            fstype="fuse.sshfs"
+            opts="uid=$(id -u),gid=$(id -g),allow_other,_netdev"
+            echo "Note: set up key login once with:  ssh-copy-id $suser"
+            ;;
+        ftp)
+            local fhost fpath fscheme
+            if [ -n "$source" ]; then
+                case "$source" in
+                    ftp://*|ftps://*)
+                        fscheme="${source%%://*}"
+                        local rest ui hp
+                        rest="${source#*://}"
+                        ui="${rest%%@*}"
+                        hp="${rest#*@}"
+                        fhost="${hp%%/*}"
+                        if [[ "$hp" == */* ]]; then fpath="/${hp#*/}"; else fpath="/"; fi
+                        if [[ "$rest" == *@* ]]; then
+                            [ -n "$user" ] || user="${ui%%:*}"
+                            [ -n "$pass" ] || pass="${ui#*:}"
+                        fi
+                        ;;
+                    *)
+                        echo "invalid ftp source (use ftp:// or ftps:// URL): $source"; exit 1
+                        ;;
+                esac
+            else
+                read -rp 'Scheme (ftp or ftps) [ftp]: ' fscheme
+                fscheme="${fscheme:-ftp}"
+                case "$fscheme" in ftp|ftps) ;; *) echo "unknown scheme: $fscheme"; exit 1 ;; esac
+                read -rp 'Host (e.g. ftp.example.com): ' fhost
+                read -rp 'Remote path [/]: ' fpath
+            fi
+            fpath="${fpath:-/}"
+            [ -n "$user" ] || { read -rp 'Username (blank = anonymous): ' user; [ -n "$user" ] || user="anonymous"; }
+            [ -n "$pass" ] || { read -rsp 'Password (blank = none): ' pass; echo; }
+            for v in "$fhost" "$fpath" "$user" "$pass"; do
+                if bad_secret "$v"; then
+                    echo "error: host, path, username and password must not contain spaces or special characters"
+                    exit 1
+                fi
+            done
+            what="$fscheme://$user:$pass@$fhost$fpath"
+            fstype="fuse.curlftpfs"
+            opts="uid=$(id -u),gid=$(id -g),allow_other,_netdev"
+            echo "Note: the $fscheme password is stored in the unit file (readable by all users); use sftp if you need secrecy"
+            ;;
+    esac
+
+    write_units "$name" "$type" "$what" "$fstype" "$opts" "$mp"
+    sudo systemctl daemon-reload
+
+    local mode="${mode_flag:-auto}"
+    if [ -z "$mode_flag" ] && [ -t 0 ]; then
+        read -rp 'Mode — auto (mount on access, unmount after idle) or keep (never auto-unmount)? [auto]: ' mode
+        mode="${mode:-auto}"
+    fi
+    switch_mode "$name" "$mode"
+    u="$(unit "$name")"
+    if ! systemctl is-active --quiet "$u.mount" 2>/dev/null; then
+        if ! sudo systemctl start "$u.mount" 2>&1; then
+            warn_mount_failed "$name"
+        fi
+    fi
+    echo "Added '$name' -> $(mount_loc "$name")"
+}
+
+edit() {
+    CMD=edit require_name "$1"
+    local name="$1" u type kind was_mounted=no
+    u="$(unit "$name")"
+    [ -f "$UNIT_DIR/$u.mount" ] || { echo "no such share: $name"; exit 1; }
+    type="$(share_type "$name")"
+    case "$type" in
+        davfs)      kind="webdav" ;;
+        cifs)       kind="smb" ;;
+        fuse.sshfs) kind="sftp" ;;
+        fuse.curlftpfs) kind="ftp" ;;
+        *) echo "unknown share type: $type"; exit 1 ;;
+    esac
+    echo "Editing '$name' ($kind) -> $(mount_loc "$name")"
+
+    if systemctl is-active --quiet "$u.mount" 2>/dev/null; then
+        was_mounted=yes
+        sudo systemctl stop "$u.mount" 2>/dev/null || true
+    fi
+
+    local what fstype opts user pass
+    case "$kind" in
+        webdav)
+            local old_what old_user
+            old_what="$(unit_key What "$UNIT_DIR/$u.mount")"
+            read -rp "WebDAV URL (http or https, e.g. https://host/dav) [$old_what]: " what
+            what="${what:-$old_what}"
+            [ -n "$what" ] || { echo "URL required"; exit 1; }
+            old_user="$(sudo awk -v url="$old_what" '$1==url {print $2; exit}' "$DAV_SECRETS" 2>/dev/null || true)"
+            read -rp "Username [${old_user:-anonymous}]: " user
+            if [ -z "$user" ]; then user="${old_user:-anonymous}"; fi
+            read -rsp 'Password (blank = keep current): ' pass; echo
+            if [ -z "$pass" ]; then
+                pass="$(sudo awk -v url="$old_what" '$1==url {print $3; exit}' "$DAV_SECRETS" 2>/dev/null || true)"
+                [ "$pass" = '""' ] && pass=""
+            fi
+            for v in "$what" "$user" "$pass"; do
+                if bad_secret "$v"; then
+                    echo "error: URL, username and password must not contain spaces, quotes, backslashes or # (davfs2 secrets format)"
+                    exit 1
+                fi
+            done
+            fstype="davfs"
+            opts="uid=$(id -u),gid=$(id -g),_netdev"
+            sudo install -d -m 700 /etc/davfs2
+            local tmp="$(sudo mktemp /tmp/dav-secrets.XXXXXX)"
+            trap 'sudo rm -f "$tmp"' EXIT
+            sudo awk -v url="$old_what" '$1 != url' "$DAV_SECRETS" | sudo tee "$tmp" >/dev/null
+            sudo mv "$tmp" "$DAV_SECRETS"
+            trap - EXIT
+            sudo tee -a "$DAV_SECRETS" >/dev/null <<EOF
+$(dav_secret_line "$what" "$user" "$pass")
+EOF
+            sudo chmod 600 "$DAV_SECRETS"
+            warn_bad_secrets
+            ;;
+        smb)
+            local server share vers old_server old_share old_what old_opts old_vers old_user
+            old_what="$(unit_key What "$UNIT_DIR/$u.mount")"
+            old_opts="$(unit_key Options "$UNIT_DIR/$u.mount")"
+            old_vers="$(printf '%s\n' "$old_opts" | sed -n 's/.*\bvers=\([0-9.]*\).*/\1/p')"
+            old_rest="${old_what#//}"
+            old_server="${old_rest%%/*}"
+            old_share="${old_rest#*/}"
+            read -rp "Server [$old_server]: " server
+            server="${server:-$old_server}"
+            read -rp "Share name [$old_share]: " share
+            share="${share:-$old_share}"
+            [ -n "$server" ] && [ -n "$share" ] || { echo "server and share name required"; exit 1; }
+            read -rp "SMB protocol version (e.g. 1.0, 2.0, 3.0 — blank for auto) [${old_vers:-auto}]: " vers
+            if [ -z "$vers" ]; then vers="$old_vers"; fi
+            old_user="$(sudo sed -n 's/^username=//p' "$CIFS_CRED_DIR/$name" 2>/dev/null || true)"
+            read -rp "Username [${old_user:-guest}]: " user
+            if [ -z "$user" ]; then user="${old_user:-guest}"; fi
+            read -rsp 'Password (blank = keep current): ' pass; echo
+            if [ -z "$pass" ]; then
+                pass="$(sudo sed -n 's/^password=//p' "$CIFS_CRED_DIR/$name" 2>/dev/null || true)"
+            fi
+            for v in "$server" "$share"; do
+                if bad_secret "$v"; then
+                    echo "error: server and share name must not contain spaces or special characters"
+                    exit 1
+                fi
+            done
+            what="//$server/$share"
+            fstype="cifs"
+            opts="credentials=$CIFS_CRED_DIR/$name,uid=$(id -u),gid=$(id -g),iocharset=utf8,_netdev"
+            [ -n "$vers" ] && opts="$opts,vers=$vers"
+            sudo tee "$CIFS_CRED_DIR/$name" >/dev/null <<EOF
+username=$user
+password=$pass
+EOF
+            sudo chmod 600 "$CIFS_CRED_DIR/$name"
+            ;;
+        sftp)
+            local suser rpath old_what old_suser old_rpath
+            old_what="$(unit_key What "$UNIT_DIR/$u.mount")"
+            old_suser="${old_what%%:*}"
+            old_rpath="${old_what#*:}"
+            read -rp "User@Server [$old_suser]: " suser
+            suser="${suser:-$old_suser}"
+            read -rp "Remote path [$old_rpath]: " rpath
+            rpath="${rpath:-$old_rpath}"
+            for v in "$suser" "$rpath"; do
+                if bad_secret "$v"; then
+                    echo "error: user@server and remote path must not contain spaces or special characters"
+                    exit 1
+                fi
+            done
+            what="$suser:$rpath"
+            fstype="fuse.sshfs"
+            opts="uid=$(id -u),gid=$(id -g),allow_other,_netdev"
+            ;;
+        ftp)
+            local fhost fpath fscheme old_what old_rest old_ui old_hp old_host old_path old_user
+            old_what="$(unit_key What "$UNIT_DIR/$u.mount")"
+            fscheme="${old_what%%://*}"
+            old_rest="${old_what#*://}"
+            old_ui="${old_rest%%@*}"
+            old_hp="${old_rest#*@}"
+            old_host="${old_hp%%/*}"
+            if [[ "$old_hp" == */* ]]; then old_path="/${old_hp#*/}"; else old_path="/"; fi
+            old_user="${old_ui%%:*}"
+            read -rp "Scheme (ftp or ftps) [$fscheme]: " scheme
+            scheme="${scheme:-$fscheme}"
+            case "$scheme" in ftp|ftps) ;; *) echo "unknown scheme: $scheme"; exit 1 ;; esac
+            read -rp "Host [$old_host]: " fhost
+            fhost="${fhost:-$old_host}"
+            read -rp "Remote path [$old_path]: " fpath
+            fpath="${fpath:-$old_path}"
+            read -rp "Username [${old_user:-anonymous}]: " user
+            if [ -z "$user" ]; then user="${old_user:-anonymous}"; fi
+            read -rsp 'Password (blank = keep current): ' pass; echo
+            if [ -z "$pass" ]; then pass="${old_ui#*:}"; fi
+            for v in "$fhost" "$fpath" "$user" "$pass"; do
+                if bad_secret "$v"; then
+                    echo "error: host, path, username and password must not contain spaces or special characters"
+                    exit 1
+                fi
+            done
+            what="$scheme://$user:$pass@$fhost$fpath"
+            fstype="fuse.curlftpfs"
+            opts="uid=$(id -u),gid=$(id -g),allow_other,_netdev"
+            ;;
+        *)
+            echo "unknown share type: $type"; exit 1
+            ;;
+    esac
+
+    local new_mp old_mp new_u
+    old_mp="$(mount_loc "$name")"
+    read -rp "Mount point [$old_mp]: " new_mp
+    new_mp="${new_mp:-$old_mp}"
+    [[ "$new_mp" == /* ]] || { echo "invalid mountpoint (must be an absolute path like /mnt/nas): $new_mp"; exit 1; }
+    if other="$(mp_in_use "$new_mp" "$u.mount")"; then
+        echo "mount point $new_mp is already used by share '$other'"; exit 1
+    fi
+
+    write_units "$name" "$kind" "$what" "$fstype" "$opts" "$new_mp"
+    new_u="$(systemd-escape --path --suffix=mount "$new_mp")"
+    new_u="${new_u%.mount}"
+    if [ "$new_u" != "$u" ]; then
+        echo "moved '$name' from $old_mp to $new_mp"
+        sudo systemctl disable --now "$u.mount" "$u.automount" 2>/dev/null || true
+        sudo rm -f "$UNIT_DIR/$u.mount" "$UNIT_DIR/$u.automount"
+    fi
+    sudo systemctl daemon-reload
+
+    local mode
+    if systemctl is-enabled --quiet "$u.automount" 2>/dev/null; then mode="auto"
+    elif systemctl is-enabled --quiet "$u.mount" 2>/dev/null; then mode="keep"
+    else mode="auto"; fi
+    switch_mode "$name" "$mode"
+
+    if [ "$was_mounted" = yes ]; then
+        if ! sudo systemctl start "$new_u.mount" 2>&1; then
+            echo "updated, but remount FAILED:"
+            try_mount "$name" || true
+            exit 1
+        fi
+        echo "Updated '$name' (remounted at $(mount_loc "$name"))"
+    else
+        echo "Updated '$name' -> $(mount_loc "$name")"
+    fi
+}
+
+remove_share() {
+    CMD=remove require_name "$1"
+    local name="$1" u type what
+    u="$(unit "$name")"
+    type="$(share_type "$name")"
+    what="$(unit_key What "$UNIT_DIR/$u.mount")"
+    sudo systemctl disable --now "$u.automount" "$u.mount" 2>/dev/null || true
+    sudo rm -f "$UNIT_DIR/$u.automount" "$UNIT_DIR/$u.mount"
+    sudo systemctl daemon-reload
+    sudo rm -f "$CIFS_CRED_DIR/$name"
+    if [ "$type" = "davfs" ] && [ -n "$what" ] && [ -f "$DAV_SECRETS" ]; then
+        local tmp="$(sudo mktemp /tmp/dav-secrets.XXXXXX)"
+        trap 'sudo rm -f "$tmp"' EXIT
+        sudo awk -v url="$what" '$1 != url' "$DAV_SECRETS" | sudo tee "$tmp" >/dev/null
+        sudo mv "$tmp" "$DAV_SECRETS"
+        trap - EXIT
+        sudo chmod 600 "$DAV_SECRETS"
+    fi
+    echo "Removed '$name'"
+}
+
+status() {
+    shopt -s nullglob
+    local f name u type mode a m st state failed=()
+    for f in "$UNIT_DIR"/*.mount; do
+        name="$(sed -n 's/^Description=.*network share //p' "$f")"
+        [ -n "$name" ] || continue
+        u="$(basename "$f" .mount)"
+        type="$(unit_key Type "$f")"
+        a="$(systemctl is-enabled "$u.automount" 2>/dev/null || true)"
+        m="$(systemctl is-enabled "$u.mount" 2>/dev/null || true)"
+        if [ "$a" = "enabled" ]; then mode="auto"
+        elif [ "$m" = "enabled" ]; then mode="keep"
+        else mode="off"; fi
+        st="$(systemctl is-active "$u.mount" 2>/dev/null || true)"
+        case "$st" in
+            active) state="mounted" ;;
+            failed) state="FAILED"; failed+=("$name") ;;
+            *)      state="unmounted" ;;
+        esac
+        printf '%-15s %-6s %-8s %s\n' "$name" "$mode" "$type" "$state"
+    done
+    if [ ${#failed[@]} -gt 0 ]; then
+        echo
+        echo "FAILED shares — see why with: mount-net mount <name>"
+    fi
+    shopt -u nullglob
+}
+
+warn_bad_secrets() {
+    [ -f "$DAV_SECRETS" ] || return 0
+    local bad
+    bad="$(sudo awk 'NF>0 && $0 !~ /^#/ && (NF<2 || NF>3) { print NR }' "$DAV_SECRETS" 2>/dev/null || true)"
+    if [ -n "$bad" ]; then
+        echo "WARNING: malformed line(s) $bad in $DAV_SECRETS"
+    fi
+}
+
+usage() {
+    cat <<'EOF'
+usage: mount-net <command> [args]
+
+commands:
+  add [type] [source] [name] [mountpoint] [--user u] [--pass p] [--vers v]
+                              add a share; type is webdav|ftp|smb|sftp, source is
+                              the URL/share (https://..., ftp(s)://..., //server/share,
+                              user@host[:path]); mountpoint defaults to /mnt/<name>;
+                              anything omitted is prompted for
+  edit <name>                 change an existing share (url/server/credentials,
+                              mount point; a changed mount point moves the share)
+  remove <name>               forget a share (also clears its credentials)
+  status                      list shares with mode and mounted state
+  mount <name>                mount now
+  umount <name>               unmount now
+  auto <name>                 mount on access, unmount after idle (default)
+  keep <name>                 mount at boot, never auto-unmount; if it can't
+                              mount right now it's saved anyway (warning shown)
+  help                        show this help
+
+options (add): --user u   --pass p   --vers v   --keep   --auto
+EOF
+}
+
+CMD="${1:-}"
+case "$CMD" in
+    add)   shift; add "$@" ;;
+    edit)  shift; edit "$@" ;;
+    remove) shift; remove_share "$@" ;;
+    status) status ;;
+    mount) shift; CMD=mount require_name "$1"
+        u="$(unit "$1")"
+        if ! sudo systemctl start "$u.mount" 2>&1; then
+            echo "systemd failed to mount '$1' — showing the real error:"
+            try_mount "$1"
+            exit 1
+        fi
+        echo "'$1' mounted at $(mount_loc "$1")"
+        ;;
+    umount|unmount) shift; CMD=umount require_name "$1"
+        sudo systemctl stop "$(unit "$1").mount"
+        echo "'$1' unmounted"
+        ;;
+    auto)  shift; CMD=auto require_name "$1"; switch_mode "$1" auto ;;
+    keep)  shift; CMD=keep require_name "$1"; switch_mode "$1" keep
+        u="$(unit "$1")"
+        if ! systemctl is-active --quiet "$u.mount" 2>/dev/null; then
+            if ! sudo systemctl start "$u.mount" 2>&1; then
+                warn_mount_failed "$1"
+            fi
+        fi
+        ;;
+    help|-h|--help) usage ;;
+    *)
+        usage
+        exit 1
+        ;;
+esac
