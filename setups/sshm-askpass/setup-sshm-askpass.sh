@@ -60,6 +60,17 @@ cat > "$ASKPASS" <<'SCRIPT'
 PROMPT="$1"
 PASSFILE="$HOME/.ssh/sshm_passwords"
 
+# Handle host key verification prompts (e.g. "Are you sure you want to
+# continue connecting (yes/no)?"). SSH_ASKPASS_REQUIRE=force means ssh
+# sends these through askpass as well; without this, they fail with
+# "Host key verification failed".
+case "$PROMPT" in
+    *"continue connecting"*|*"yes/no"*)
+        printf 'yes\n'
+        exit 0
+        ;;
+esac
+
 [ -r "$PASSFILE" ] || exit 1
 
 PAIR=$(printf '%s\n' "$PROMPT" | grep -m1 -oP '[\w.\-]+@[\w.\-]+')

@@ -9,9 +9,10 @@
 #     so OpenSSH is installed first (dropbear removed if it conflicts).
 #   * sshm is a Go binary with no Termux package, so it is downloaded from
 #     the GitHub releases (arch-aware).
-#   * Adds StrictHostKeyChecking accept-new so first connects to new hosts
-#     do not fail with "Host key verification failed" (ssh would otherwise
-#     try to prompt on a TTY that is not available).
+#   * askpass.sh handles host key verification prompts (returns "yes")
+#     so first connects to new hosts do not fail with
+#     "Host key verification failed" (ssh would otherwise try to prompt
+#     on a TTY that is not available).
 #   * Termux auto-sources ~/.bashrc for every new session, so the SSH_ASKPASS
 #     exports apply without manual sourcing.
 #
@@ -21,7 +22,6 @@
 #   ~/.ssh/askpass.sh            the SSH_ASKPASS helper
 #   ~/.ssh/sshm_passwords        "host:password" entries (chmod 600)
 #   ~/.bashrc                    SSH_ASKPASS + SSH_ASKPASS_REQUIRE=force
-#   ~/.ssh/config                StrictHostKeyChecking accept-new
 #
 # Usage:
 #   ./setup-sshm-askpass-termux.sh
@@ -85,6 +85,17 @@ cat > "$ASKPASS" <<'SCRIPT'
 #!/data/data/com.termux/files/usr/bin/bash
 PROMPT="$1"
 PASSFILE="$HOME/.ssh/sshm_passwords"
+
+# Handle host key verification prompts (e.g. "Are you sure you want to
+# continue connecting (yes/no)?"). SSH_ASKPASS_REQUIRE=force means ssh
+# sends these through askpass as well; without this, they fail with
+# "Host key verification failed".
+case "$PROMPT" in
+    *"continue connecting"*|*"yes/no"*)
+        printf 'yes\n'
+        exit 0
+        ;;
+esac
 
 [ -r "$PASSFILE" ] || exit 1
 
@@ -168,15 +179,6 @@ if [ -f "$BASHRC" ] && grep -q 'SSH_ASKPASS_REQUIRE=force' "$BASHRC"; then
 else
     printf '\n# Use askpass helper so sshm hosts can auto-supply passwords\nSSH_ASKPASS="$HOME/.ssh/askpass.sh"\nexport SSH_ASKPASS\nexport SSH_ASKPASS_REQUIRE=force\n' >> "$BASHRC"
     log "Added env exports to $BASHRC"
-fi
-
-# ---------- 4) Auto-accept new host keys ----------
-SSHCONFIG="$HOME/.ssh/config"
-if [ -f "$SSHCONFIG" ] && grep -q 'StrictHostKeyChecking accept-new' "$SSHCONFIG"; then
-    log "StrictHostKeyChecking accept-new already in $SSHCONFIG"
-else
-    printf '\nHost *\n    StrictHostKeyChecking accept-new\n' >> "$SSHCONFIG"
-    log "Added StrictHostKeyChecking accept-new to $SSHCONFIG"
 fi
 
 echo
