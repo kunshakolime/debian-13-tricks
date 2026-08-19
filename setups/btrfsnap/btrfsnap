@@ -1,0 +1,592 @@
+#!/bin/bash
+#
+# btrfsnap - Btrfs snapshot manager
+#
+# Config resolution (first wins):
+#   CLI flags  >  environment variables  >  ~/.config/btrfsnap.conf  >  /etc/btrfsnap.conf  >  defaults
+#
+# Settings (all optional):
+#   SNAP_DIR=            Where snapshots are stored        (default: /snapshot)
+#   SNAP_PREFIX=         Snapshot name prefix              (default: rootfs-)
+#   SNAPSHOT_SOURCE=     Subvolume to snapshot (auto|PATH) (default: auto)
+#   KEEP_COUNT=          Retain only newest N snapshots    (default: 0 = keep all)
+#   SETUP_MODE=          auto|toplevel|inplace             (default: auto)
+#
+
+set -euo pipefail
+
+# ---- Defaults -------------------------------------------------------------
+DEFAULT_SNAP_DIR="/snapshot"
+DEFAULT_SNAP_PREFIX="rootfs-"
+DEFAULT_KEEP_COUNT="0"
+DEFAULT_SETUP_MODE="auto"
+
+# ---- Colors ---------------------------------------------------------------
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+CYAN='\033[0;36m'
+BOLD='\033[1m'
+RESET='\033[0m'
+
+info()  { echo -e "${GREEN}[+]${RESET} $*"; }
+warn()  { echo -e "${YELLOW}[!]${RESET} $*"; }
+error() { echo -e "${RED}[x]${RESET} $*"; }
+
+# ---- Helpers --------------------------------------------------------------
+check_root() {
+    if [[ $EUID -ne 0 ]]; then
+        error "This command requires root. Run with sudo."
+        exit 1
+    fi
+}
+
+check_btrfs() {
+    if ! command -v btrfs &>/dev/null; then
+        error "btrfs-progs not found. Install it first:"
+        echo "  Debian/Ubuntu: sudo apt install btrfs-progs"
+        echo "  Fedora/RHEL:   sudo dnf install btrfs-progs"
+        echo "  Arch:          sudo pacman -S btrfs-progs"
+        exit 1
+    fi
+}
+
+is_btrfs_root() {
+    local fstype
+    fstype=$(stat -f -c '%T' / 2>/dev/null || df -T / | tail -1 | awk '{print $2}')
+    [[ "$fstype" == "btrfs" ]]
+}
+
+is_btrfs_path() {
+    local path="${1:-.}"
+    [[ "$(stat -f -c '%T' "$path" 2>/dev/null)" == "btrfs" ]]
+}
+
+path_is_subvolume() {
+    btrfs subvolume show "$1" &>/dev/null
+}
+
+# ---- Config loading -------------------------------------------------------
+get_config_home() {
+    local user_home="$HOME"
+    if [[ -n "${SUDO_USER:-}" ]] && [[ "$SUDO_USER" != "root" ]]; then
+        user_home=$(getent passwd "$SUDO_USER" | cut -d: -f6)
+    fi
+    echo "$user_home"
+}
+
+CONFIG_FILES=()
+
+load_config() {
+    CONFIG_FILES=("/etc/btrfsnap.conf" "$(get_config_home)/.config/btrfsnap.conf")
+    local f
+    for f in "${CONFIG_FILES[@]}"; do
+        if [[ -f "$f" ]]; then
+            # shellcheck disable=SC1090
+            source "$f"
+        fi
+    done
+}
+
+parse_args() {
+    SNAP_DIR="$DEFAULT_SNAP_DIR"
+    SNAP_PREFIX="$DEFAULT_SNAP_PREFIX"
+    KEEP_COUNT="$DEFAULT_KEEP_COUNT"
+    SETUP_MODE="$DEFAULT_SETUP_MODE"
+    SNAPSHOT_SOURCE="auto"
+
+    # Env overrides (higher priority than config, lower than CLI)
+    SNAP_DIR="${BTRFSNAP_SNAP_DIR:-$SNAP_DIR}"
+    SNAP_PREFIX="${BTRFSNAP_SNAP_PREFIX:-$SNAP_PREFIX}"
+    KEEP_COUNT="${BTRFSNAP_KEEP_COUNT:-$KEEP_COUNT}"
+    SETUP_MODE="${BTRFSNAP_SETUP_MODE:-$SETUP_MODE}"
+    SNAPSHOT_SOURCE="${BTRFSNAP_SNAPSHOT_SOURCE:-$SNAPSHOT_SOURCE}"
+
+    local args=()
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            --dir)       SNAP_DIR="$2"; shift 2 ;;
+            --prefix)    SNAP_PREFIX="$2"; shift 2 ;;
+            --keep)      KEEP_COUNT="$2"; shift 2 ;;
+            --source)    SNAPSHOT_SOURCE="$2"; shift 2 ;;
+            --setup-mode) SETUP_MODE="$2"; shift 2 ;;
+            *)           args+=("$1"); shift ;;
+        esac
+    done
+
+    # shellcheck disable=SC2034
+    ARGS=("${args[@]}")
+}
+
+# ---- Core helpers ---------------------------------------------------------
+snapshot_subvol_exists() {
+    [[ -d "$SNAP_DIR" ]] && ls -A "$SNAP_DIR" &>/dev/null
+}
+
+get_snapshots() {
+    btrfs subvolume list "$SNAP_DIR" 2>/dev/null |
+        awk -v prefix="$SNAP_PREFIX" '$NF ~ "^"prefix"[0-9]{4}-[0-9]{2}-[0-9]{2}_" {print $NF}' |
+        sort -r
+}
+
+get_snapshot_size() {
+    local path="$SNAP_DIR/$1"
+    btrfs filesystem du "$path" 2>/dev/null | tail -1 | awk '{print $1}'
+}
+
+# Determine what subvolume to snapshot. "auto" = the filesystem mounted at /.
+get_source_subvol() {
+    if [[ "$SNAPSHOT_SOURCE" != "auto" ]]; then
+        echo "$SNAPSHOT_SOURCE"
+        return
+    fi
+    echo "/"
+}
+
+get_fs_device() {
+    findmnt -no SOURCE / | sed 's/\[.*\]//'
+}
+
+get_mounted_subvol_name() {
+    local subvol
+    subvol=$(findmnt -no OPTIONS / | tr ',' '\n' | sed -n 's/^subvol=//p')
+    [[ -n "$subvol" ]] && echo "${subvol#/}"
+}
+
+# True if the given path's parent is a subvolume sibling (top-level 5 child)
+is_toplevel_candidate() {
+    # Path must be within the same fs as / and not inside another subvolume.
+    # We just check the mountpoint logic by attempting to resolve a name.
+    local name
+    name=$(basename "$1")
+    [[ -n "$name" ]] && [[ "$name" != "/" ]]
+}
+
+# --- Retention -------------------------------------------------------------
+apply_retention() {
+    if [[ "$KEEP_COUNT" =~ ^[0-9]+$ ]] && (( KEEP_COUNT > 0 )); then
+        local snaps
+        snaps=($(get_snapshots))
+        local total=${#snaps[@]}
+        if (( total > KEEP_COUNT )); then
+            local to_delete=()
+            local i
+            for ((i=KEEP_COUNT; i<total; i++)); do
+                to_delete+=("${snaps[$i]}")
+            done
+            warn "Retention: keeping newest $KEEP_COUNT, pruning ${#to_delete[@]} old snapshot(s)."
+            for snap in "${to_delete[@]}"; do
+                info "Deleting $snap ..."
+                btrfs subvolume delete "$SNAP_DIR/$snap" >/dev/null
+            done
+        fi
+    fi
+}
+
+# ---- Commands -------------------------------------------------------------
+do_config() {
+    echo "# btrfsnap configuration"
+    echo "# Copy to /etc/btrfsnap.conf (system-wide) or ~/.config/btrfsnap.conf (per-user)"
+    echo
+    echo "# Where to store snapshots"
+    echo "#SNAP_DIR=\"/snapshot\""
+    echo
+    echo "# Prefix for snapshot names (must be followed by YYYY-MM-DD_HH-MM-SS)"
+    echo "#SNAP_PREFIX=\"rootfs-\""
+    echo
+    echo "# Subvolume to snapshot. auto = detect the one mounted at /"
+    echo "#SNAPSHOT_SOURCE=\"auto\""
+    echo
+    echo "# Keep only the newest N snapshots (0 = keep all)"
+    echo "#KEEP_COUNT=\"0\""
+    echo
+    echo "# Setup mode: auto = smart (top-level sibling when possible),"
+    echo "#             toplevel = always create as sibling at btrfs top level,"
+    echo "#             inplace = simple subvolume create at path"
+    echo "#SETUP_MODE=\"auto\""
+}
+
+# Setup the snapshot storage subvolume. Explains both modes to the user.
+do_setup() {
+    check_root
+    check_btrfs
+
+    local parent
+    parent=$(dirname "$SNAP_DIR")
+    if ! is_btrfs_path "$parent"; then
+        error "$SNAP_DIR is not on a btrfs filesystem."
+        error "Choose a location on a btrfs mount (e.g. under /var/tmp or a dedicated volume)."
+        exit 1
+    fi
+
+    if snapshot_subvol_exists; then
+        info "Snapshot subvolume already exists at $SNAP_DIR"
+        return
+    fi
+
+    if [[ -d "$SNAP_DIR" ]] && ! path_is_subvolume "$SNAP_DIR"; then
+        error "$SNAP_DIR exists but is not a btrfs subvolume."
+        error "Remove it or choose a different path."
+        exit 1
+    fi
+
+    local mode="$SETUP_MODE"
+    if [[ "$mode" == "auto" ]]; then
+        echo -e "\n${BOLD}How do you want snapshots stored?${RESET}"
+        echo
+        echo "  1) Top-level sibling mount (recommended)"
+        echo "     Creates the snapshot subvolume OUTSIDE your root subvolume and"
+        echo "     mounts it at $SNAP_DIR. Snapshots of / will NOT contain the"
+        echo "     snapshot folder (no nested snapshots)."
+        echo
+        echo "  2) Simple subvolume at $SNAP_DIR"
+        echo "     Just runs 'btrfs subvolume create'. Fast and simple, but the"
+        echo "     folder lives inside your root subvolume, so it rides along"
+        echo "     inside every snapshot."
+        echo
+        read -rp "Choose [1/2] (default 1): " setup_choice
+        if [[ "$setup_choice" == "2" ]]; then
+            mode="inplace"
+        else
+            mode="toplevel"
+        fi
+    fi
+
+    if [[ "$mode" == "inplace" ]]; then
+        info "Creating subvolume at $SNAP_DIR ..."
+        btrfs subvolume create "$SNAP_DIR" >/dev/null
+        info "Done. Snapshots will be stored in $SNAP_DIR"
+        return
+    fi
+
+    # ---- toplevel mode ----
+    local name dev subvol
+    name=$(basename "$SNAP_DIR")
+    dev=$(get_fs_device)
+    subvol=$(get_mounted_subvol_name)
+
+    if [[ -z "$name" || "$name" == "/" ]]; then
+        error "Cannot determine a name for the snapshot subvolume from $SNAP_DIR"
+        exit 1
+    fi
+
+    # Mount btrfs top-level (subvolid=5) to a temp location
+    local tmpmount
+    tmpmount=$(mktemp -d)
+
+    local trap_cleanup
+    trap_cleanup() {
+        umount "$tmpmount" 2>/dev/null || true
+        rmdir "$tmpmount" 2>/dev/null || true
+    }
+    trap trap_cleanup EXIT
+
+    info "Mounting btrfs top-level subvolume (ID 5) ..."
+    mount -o subvolid=5 "$dev" "$tmpmount"
+
+    if [[ -e "$tmpmount/$name" ]]; then
+        error "A subvolume named '$name' already exists at top level."
+        umount "$tmpmount"
+        rmdir "$tmpmount"
+        trap - EXIT
+        exit 1
+    fi
+
+    info "Creating top-level subvolume '$name' ..."
+    btrfs subvolume create "$tmpmount/$name" >/dev/null
+
+    umount "$tmpmount"
+    rmdir "$tmpmount"
+    trap - EXIT
+
+    # Mount it at the configured path and persist in fstab
+    if ! mountpoint -q "$SNAP_DIR" 2>/dev/null; then
+        mkdir -p "$SNAP_DIR"
+        info "Mounting $SNAP_DIR (subvol=$name) ..."
+        mount -o "subvol=$name,compress=zstd" "$dev" "$SNAP_DIR"
+    fi
+
+    if ! grep -q "btrfsnap" /etc/fstab; then
+        echo "# btrfsnap: snapshot storage subvolume" >> /etc/fstab
+    fi
+    if ! grep -q "subvol=$name " /etc/fstab; then
+        echo "$dev $SNAP_DIR btrfs subvol=$name,compress=zstd,nofail 0 0" >> /etc/fstab
+        info "Added fstab entry for $SNAP_DIR"
+    fi
+
+    info "Done. Snapshots will be stored in $SNAP_DIR (outside the root subvolume)."
+}
+
+do_snapshot() {
+    check_root
+    if ! snapshot_subvol_exists; then
+        warn "Snapshot subvolume not found at $SNAP_DIR"
+        if ! is_btrfs_path "$(dirname "$SNAP_DIR")"; then
+            error "$SNAP_DIR is not on a btrfs filesystem."
+            return
+        fi
+        read -rp "Run setup now? [Y/n] " ans
+        if [[ ! "$ans" =~ ^[Nn]$ ]]; then
+            do_setup
+        else
+            error "Cannot take snapshot without $SNAP_DIR"
+            return
+        fi
+    fi
+
+    local src
+    src=$(get_source_subvol)
+    local name="${SNAP_PREFIX}$(date +%Y-%m-%d_%H-%M-%S)"
+
+    # Avoid name collision if a snapshot with the same second already exists
+    local base="$name"
+    local n=1
+    while [[ -e "$SNAP_DIR/$name" ]]; do
+        name="${base}-${n}"
+        ((n++))
+    done
+
+    info "Taking snapshot of $src -> $SNAP_DIR/$name"
+    btrfs subvolume snapshot -r "$src" "$SNAP_DIR/$name" >/dev/null
+    info "Snapshot created: $name"
+
+    apply_retention
+}
+
+do_list() {
+    check_root
+    local snaps
+    snaps=($(get_snapshots))
+
+    if [[ ${#snaps[@]} -eq 0 ]]; then
+        warn "No snapshots found in $SNAP_DIR"
+        return
+    fi
+
+    echo -e "\n${BOLD}Snapshots in $SNAP_DIR:${RESET}\n"
+    printf "  ${CYAN}%-4s %-30s %-12s %s${RESET}\n" "#" "SNAPSHOT" "DATE" "STATUS"
+    printf "  %-4s %-30s %-12s %s\n" "----" "------------------------------" "------------" "------"
+
+    for i in "${!snaps[@]}"; do
+        local snap="${snaps[$i]}"
+        local date status
+        date=$(echo "$snap" | grep -o '[0-9]\{4\}-[0-9]\{2\}-[0-9]\{2\}_[0-9]\{2\}-[0-9]\{2\}-[0-9]\{2\}' | tr '_' ' ')
+        if btrfs subvolume show "$SNAP_DIR/$snap" 2>/dev/null | grep -q 'Flags:.*readonly'; then
+            status="${YELLOW}readonly${RESET}"
+        else
+            status="${GREEN}read-write${RESET}"
+        fi
+        printf "  ${CYAN}%2d${RESET}   %-30s %-12s %b\n" "$((i + 1))" "$snap" "$date" "$status"
+    done
+    echo
+}
+
+do_delete() {
+    check_root
+    local snaps
+    snaps=($(get_snapshots))
+
+    if [[ ${#snaps[@]} -eq 0 ]]; then
+        warn "No snapshots to delete."
+        return
+    fi
+
+    echo -e "\n${BOLD}Available snapshots:${RESET}\n"
+    for i in "${!snaps[@]}"; do
+        echo "  $((i + 1))) ${snaps[$i]}"
+    done
+
+    echo
+    read -rp "Enter snapshot numbers to delete (space-separated, e.g. 1 3): " choices
+
+    local selected=()
+    for choice in $choices; do
+        if [[ "$choice" =~ ^[0-9]+$ ]] && (( choice >= 1 && choice <= ${#snaps[@]} )); then
+            selected+=("${snaps[$((choice - 1))]}")
+        else
+            error "Invalid selection: $choice"
+        fi
+    done
+
+    if [[ ${#selected[@]} -eq 0 ]]; then
+        warn "Nothing selected."
+        return
+    fi
+
+    echo -e "\n${RED}Will delete:${RESET}"
+    printf '  %s\n' "${selected[@]}"
+
+    echo
+    read -rp "Are you sure? [y/N] " confirm
+    if [[ "$confirm" =~ ^[Yy]$ ]]; then
+        for snap in "${selected[@]}"; do
+            info "Deleting $snap ..."
+            btrfs subvolume delete "$SNAP_DIR/$snap" >/dev/null
+        done
+        info "Done."
+    else
+        warn "Cancelled."
+    fi
+}
+
+do_usage() {
+    check_root
+    if ! snapshot_subvol_exists; then
+        warn "No snapshot subvolume found at $SNAP_DIR"
+        return
+    fi
+
+    local snaps
+    snaps=($(get_snapshots))
+
+    if [[ ${#snaps[@]} -eq 0 ]]; then
+        warn "No snapshots found in $SNAP_DIR"
+        return
+    fi
+
+    echo -e "\n${BOLD}Disk usage by snapshot:${RESET}\n"
+
+    local total_bytes=0
+    local sizes=()
+
+    for snap in "${snaps[@]}"; do
+        local size_str
+        size_str=$(get_snapshot_size "$snap")
+        sizes+=("$size_str")
+        local bytes
+        bytes=$(echo "$size_str" | awk '{
+            val=$1;
+            if ($0 ~ /GiB/) val *= 1024*1024*1024;
+            else if ($0 ~ /MiB/) val *= 1024*1024;
+            else if ($0 ~ /KiB/) val *= 1024;
+            printf "%.0f", val
+        }')
+        total_bytes=$((total_bytes + bytes))
+    done
+
+    local i=0
+    for snap in "${snaps[@]}"; do
+        local pct bar_len
+        pct=$(echo "${sizes[$i]}" | awk -v tb="$total_bytes" '{
+            val=$1;
+            if ($0 ~ /GiB/) val *= 1024*1024*1024;
+            else if ($0 ~ /MiB/) val *= 1024*1024;
+            else if ($0 ~ /KiB/) val *= 1024;
+            if (tb > 0) printf "%.1f", (val/tb)*100;
+            else printf "0.0"
+        }')
+        bar_len=$(echo "$pct" | awk '{printf "%.0f", $1/100*40}')
+        local bar=""
+        for ((j=0; j<bar_len; j++)); do bar+="█"; done
+        printf "  ${CYAN}%-30s${RESET} %8s  ${GREEN}%s${RESET} %s%%\n" "$snap" "${sizes[$i]}" "$bar" "$pct"
+        i=$((i + 1))
+    done
+
+    local total_human
+    total_human=$(echo "$total_bytes" | awk '{
+        if ($1 >= 1024*1024*1024) printf "%.2f GiB", $1/1024/1024/1024;
+        else if ($1 >= 1024*1024) printf "%.2f MiB", $1/1024/1024;
+        else if ($1 >= 1024) printf "%.2f KiB", $1/1024;
+        else printf "%d B", $1
+    }')
+    echo
+    echo -e "  ${BOLD}Total:${RESET} ${#snaps[@]} snapshot(s), ${total_human} exclusive"
+    echo
+}
+
+show_menu() {
+    clear
+    echo -e "${BOLD}${CYAN}"
+    echo "  ╔══════════════════════════════════╗"
+    echo "  ║           btrfsnap               ║"
+    echo "  ║     Btrfs Snapshot Manager       ║"
+    echo "  ╚══════════════════════════════════╝"
+    echo -e "${RESET}"
+    echo -e "  ${BOLD}Config:${RESET} dir=$SNAP_DIR  prefix='$SNAP_PREFIX'  keep=$KEEP_COUNT"
+    echo
+    echo "  1) Take snapshot"
+    echo "  2) List snapshots"
+    echo "  3) Delete snapshot(s)"
+    echo "  4) Disk usage"
+    echo "  5) Setup (create storage)"
+    echo "  6) Show config"
+    echo
+    echo "  0) Exit"
+    echo
+}
+
+main() {
+    local orig_args=("$@")
+    load_config
+    parse_args "${orig_args[@]}"
+    check_btrfs
+
+    if ! is_btrfs_root; then
+        error "Root filesystem is not btrfs."
+        exit 1
+    fi
+
+    if [[ $EUID -ne 0 ]]; then
+        # Preserve full command line across sudo; config is loaded again inside.
+        exec sudo "$0" "${orig_args[@]}"
+    fi
+
+    local cmd="${ARGS[0]:-}"
+    case "$cmd" in
+        setup)            do_setup ;;
+        snapshot|snap)    do_snapshot ;;
+        list|ls)          do_list ;;
+        delete|rm)        do_delete ;;
+        usage|df)         do_usage ;;
+        config)           do_config ;;
+        help|-h|--help)
+            echo "Usage: btrfsnap [options] [command]"
+            echo
+            echo "Options:"
+            echo "  --dir PATH        Snapshot storage location"
+            echo "  --prefix PREFIX   Snapshot name prefix (must be followed by YYYY-MM-DD_HH-MM-SS)"
+            echo "  --keep N          Keep only newest N snapshots (0 = all)"
+            echo "  --source PATH     Subvolume to snapshot (auto = detect)"
+            echo "  --setup-mode MODE toplevel | inplace | auto"
+            echo
+            echo "Commands:"
+            echo "  setup      Create snapshot storage (interactive choice)"
+            echo "  snapshot   Take a new read-only snapshot"
+            echo "  list       List existing snapshots"
+            echo "  delete     Delete snapshots interactively"
+            echo "  usage      Show disk usage per snapshot"
+            echo "  config     Print a sample config file"
+            echo "  (none)     Open interactive TUI menu"
+            echo
+            echo "Config files: /etc/btrfsnap.conf, ~/.config/btrfsnap.conf"
+            echo "Env vars: BTRFSNAP_SNAP_DIR, BTRFSNAP_SNAP_PREFIX, BTRFSNAP_KEEP_COUNT,"
+            echo "          BTRFSNAP_SNAPSHOT_SOURCE, BTRFSNAP_SETUP_MODE"
+            ;;
+        "") ;;
+        *)
+            error "Unknown command: $cmd (try --help)"
+            exit 1
+            ;;
+    esac
+
+    if [[ -z "$cmd" ]]; then
+        while true; do
+            show_menu
+            read -rp "  Select: " choice
+            case "$choice" in
+                1) do_snapshot ;;
+                2) do_list ;;
+                3) do_delete ;;
+                4) do_usage ;;
+                5) do_setup ;;
+                6) do_config ;;
+                0) echo; info "Bye!"; exit 0 ;;
+                *) error "Invalid option" ;;
+            esac
+            echo
+            read -rp "  Press Enter to continue..."
+        done
+    fi
+}
+
+main "$@"
