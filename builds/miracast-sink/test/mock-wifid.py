@@ -72,20 +72,16 @@ class WifiManager(dbus.service.Object):
 
     @dbus.service.method(OM_IFACE, out_signature="(a{oa{sa{sv}}})")
     def GetManagedObjects(self):
-        objects = dbus.Dictionary(
-            {
-                dbus.ObjectPath(LINK_PATH): dbus.Dictionary(
-                    {LINK_IFACE: dbus.Dictionary(self.link.props(), signature="sv")},
-                    signature="sa{sv}",
-                ),
-                dbus.ObjectPath(PEER_PATH): dbus.Dictionary(
-                    {PEER_IFACE: dbus.Dictionary(self.peer.props(), signature="sv")},
-                    signature="sa{sv}",
-                ),
+        # Return the managed objects as a tuple containing a dict
+        # dbus-python will marshal this correctly as (a{oa{sa{sv}}})
+        return ({
+            LINK_PATH: {
+                LINK_IFACE: dict(self.link.props()),
             },
-            signature="oa{sa{sv}}",
-        )
-        return (objects,)
+            PEER_PATH: {
+                PEER_IFACE: dict(self.peer.props()),
+            },
+        },)
 
     @dbus.service.signal(OM_IFACE, signature="oa{sa{sv}}")
     def InterfacesAdded(self, path, ifaces):
