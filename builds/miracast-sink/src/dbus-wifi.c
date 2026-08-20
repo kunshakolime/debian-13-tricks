@@ -302,7 +302,7 @@ find_link (MskDbusWifi *self)
 
   children = g_variant_get_child_value (objects, 0);
   g_variant_iter_init (&iter, children);
-  while (g_variant_iter_next (&iter, "{&o@a{sa{sv}}}", &path, &ifaces))
+  while (g_variant_iter_next (&iter, "o@a{sa{sv}}", &path, &ifaces))
     {
       GVariant *link_props;
       gchar *wfd;

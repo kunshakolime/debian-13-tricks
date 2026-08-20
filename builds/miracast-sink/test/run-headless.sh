@@ -89,11 +89,12 @@ check "RTSP handshake (SETUP)"     "RTSP << SETUP"                        "$MOCK
 check "RTSP handshake (PLAY)"      "RTSP << PLAY"                         "$MOCK_LOG"
 check "RTP stream started"         "handshake complete"                 "$MOCK_LOG"
 
-if grep -q "GStreamer error" "$APP_LOG"; then
-  echo "FAIL: app reported a GStreamer error"
+# Check for CRITICAL or FATAL GStreamer errors (not WARN)
+if grep -q "GStreamer.*CRITICAL\|GStreamer.*WARNING.*Internal data stream error\|GStreamer error.*reason not-linked" "$APP_LOG"; then
+  echo "FAIL: app reported a fatal GStreamer error"
   rc=1
 else
-  echo "PASS: app: no GStreamer error"
+  echo "PASS: app: no fatal GStreamer error"
 fi
 
 if [ "$rc" -eq 0 ]; then

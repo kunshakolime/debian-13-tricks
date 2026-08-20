@@ -266,6 +266,8 @@ def run_rtsp():
         sink.m3_get_parameter()
         sink.m4_set_parameter()
         sink.m6_play()
+        log("handshake complete; waiting for pipeline to initialize")
+        time.sleep(0.5)
         log("handshake complete; starting RTP stream")
         subprocess.Popen([
             "gst-launch-1.0", "-q",
