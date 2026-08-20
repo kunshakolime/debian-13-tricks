@@ -204,10 +204,13 @@ on_peer_properties_changed (GDBusConnection *connection,
   GVariant *value;
   gboolean connected;
 
-  if (g_strcmp0 (iface, MSK_WIFI_PEER_IFACE) != 0)
-    return;
-
   g_variant_get (params, "(&s@a{sv}@as)", &iface, &changed, NULL);
+  if (g_strcmp0 (iface, MSK_WIFI_PEER_IFACE) != 0)
+    {
+      g_variant_unref (changed);
+      return;
+    }
+
   g_variant_iter_init (&iter, changed);
   while (g_variant_iter_next (&iter, "{&sv}", &prop, &value))
     {
@@ -280,8 +283,8 @@ on_interfaces_added (GDBusConnection *connection,
 static gboolean
 find_link (MskDbusWifi *self)
 {
-  GVariant *objects, *ifaces;
-  GVariantIter iter, iter2;
+  GVariant *objects, *children, *ifaces;
+  GVariantIter iter;
   const gchar *path;
   gchar *name = NULL;
 
@@ -290,13 +293,15 @@ find_link (MskDbusWifi *self)
                                          MSK_WIFI_PATH,
                                          MSK_WIFI_OBJECT_MANAGER,
                                          "GetManagedObjects",
-                                         NULL, NULL,
+                                         NULL,
+                                         G_VARIANT_TYPE ("(a{oa{sa{sv}}})"),
                                          G_DBUS_CALL_FLAGS_NONE,
                                          5000, NULL, NULL);
   if (!objects)
     return FALSE;
 
-  g_variant_iter_init (&iter, objects);
+  children = g_variant_get_child_value (objects, 0);
+  g_variant_iter_init (&iter, children);
   while (g_variant_iter_next (&iter, "{&o@a{sa{sv}}}", &path, &ifaces))
     {
       GVariant *link_props;
@@ -322,6 +327,7 @@ find_link (MskDbusWifi *self)
           g_free (wfd);
           g_variant_unref (link_props);
           g_variant_unref (ifaces);
+          g_variant_unref (children);
           g_variant_unref (objects);
           return TRUE;
         }
@@ -330,6 +336,7 @@ find_link (MskDbusWifi *self)
       g_variant_unref (ifaces);
     }
 
+  g_variant_unref (children);
   g_variant_unref (objects);
   return FALSE;
 }
