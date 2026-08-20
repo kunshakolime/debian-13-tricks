@@ -72,10 +72,19 @@ class WifiManager(dbus.service.Object):
 
     @dbus.service.method(OM_IFACE, out_signature="a{oa{sa{sv}}}")
     def GetManagedObjects(self):
-        return {
-            LINK_PATH: {LINK_IFACE: self.link.props()},
-            PEER_PATH: {PEER_IFACE: self.peer.props()},
-        }
+        return dbus.Dictionary(
+            {
+                dbus.ObjectPath(LINK_PATH): dbus.Dictionary(
+                    {LINK_IFACE: dbus.Dictionary(self.link.props(), signature="sv")},
+                    signature="sa{sv}",
+                ),
+                dbus.ObjectPath(PEER_PATH): dbus.Dictionary(
+                    {PEER_IFACE: dbus.Dictionary(self.peer.props(), signature="sv")},
+                    signature="sa{sv}",
+                ),
+            },
+            signature="oa{sa{sv}}",
+        )
 
     @dbus.service.signal(OM_IFACE, signature="oa{sa{sv}}")
     def InterfacesAdded(self, path, ifaces):
@@ -280,7 +289,9 @@ def run_rtsp():
 def main():
     dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
     bus = dbus.SystemBus()
-    dbus.service.BusName(BUS_NAME, bus, do_not_queue=True)
+    # keep a reference: releasing the BusName object releases the bus name
+    bus_name = dbus.service.BusName(BUS_NAME, bus, do_not_queue=True)
+    assert bus_name
     log(f"owned {BUS_NAME}")
 
     link = Link(bus)
