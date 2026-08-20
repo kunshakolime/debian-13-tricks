@@ -50,6 +50,14 @@ mkdir -p /build/out/debpkg/DEBIAN /build/out/debpkg/usr/share/doc/miracast-sink 
 cp -a /build/out/stage/etc/. /build/out/debpkg/etc/ 2>/dev/null || true
 cp -a /build/out/stage/usr/. /build/out/debpkg/usr/
 
+# Meson installs to /usr/lib/<arch>/ but systemd reads from /usr/lib/.
+if [ -d /build/out/debpkg/usr/lib/x86_64-linux-gnu/systemd ]; then
+  mkdir -p /build/out/debpkg/usr/lib/systemd
+  cp -a /build/out/debpkg/usr/lib/x86_64-linux-gnu/systemd/. \
+         /build/out/debpkg/usr/lib/systemd/
+  rm -rf /build/out/debpkg/usr/lib/x86_64-linux-gnu/systemd
+fi
+
 cat > /build/out/debian/control <<'CTL'
 Source: miracast-sink
 Section: net
