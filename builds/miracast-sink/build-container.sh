@@ -1,9 +1,6 @@
 #!/usr/bin/env bash
 # build-container.sh — set up the build environment (image + container + source).
 #
-# Run this first if you want to pre-pull / pre-build before the actual compile.
-# Subsequent runs are instant (everything cached).
-#
 #   ./build-container.sh           # reuse cached image/container
 #   ./build-container.sh --fresh   # remove container + image, rebuild everything
 
@@ -34,7 +31,6 @@ fi
 
 mkdir -p "$CACHE/miraclecast" "$CACHE/out"
 
-# 1. image
 if ! podman image exists "$IMAGE"; then
   log "Building image '$IMAGE' (Dockerfile)"
   podman build --progress=plain -t "$IMAGE" -f "$SCRIPT_DIR/Dockerfile" "$SCRIPT_DIR"
@@ -42,7 +38,6 @@ else
   log "Image '$IMAGE' cached"
 fi
 
-# 2. container
 if podman container exists "$CTR"; then
   log "Reusing container '$CTR'"
   podman start "$CTR" >/dev/null 2>&1 || true
@@ -55,7 +50,6 @@ else
     "$IMAGE" sleep infinity
 fi
 
-# 3. miraclecast source
 if [ ! -d "$CACHE/miraclecast/.git" ]; then
   log "Cloning MiracleCast (pinned to $MIRACLE_COMMIT)"
   git clone https://github.com/albfan/miraclecast.git "$CACHE/miraclecast"
