@@ -70,9 +70,9 @@ class WifiManager(dbus.service.Object):
         self.link = link
         self.peer = peer
 
-    @dbus.service.method(OM_IFACE, out_signature="a{oa{sa{sv}}}")
+    @dbus.service.method(OM_IFACE, out_signature="(a{oa{sa{sv}}})")
     def GetManagedObjects(self):
-        return dbus.Dictionary(
+        objects = dbus.Dictionary(
             {
                 dbus.ObjectPath(LINK_PATH): dbus.Dictionary(
                     {LINK_IFACE: dbus.Dictionary(self.link.props(), signature="sv")},
@@ -85,6 +85,7 @@ class WifiManager(dbus.service.Object):
             },
             signature="oa{sa{sv}}",
         )
+        return (objects,)
 
     @dbus.service.signal(OM_IFACE, signature="oa{sa{sv}}")
     def InterfacesAdded(self, path, ifaces):
