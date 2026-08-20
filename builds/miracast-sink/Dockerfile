@@ -9,8 +9,8 @@
 
 FROM docker.io/library/debian:13
 
-RUN apt-get update -qq \
- && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends \
+RUN apt-get update \
+ && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     build-essential meson ninja-build pkg-config git ca-certificates curl file \
     libglib2.0-dev libsystemd-dev libudev-dev libreadline-dev \
     libgtk-4-dev libadwaita-1-dev \
