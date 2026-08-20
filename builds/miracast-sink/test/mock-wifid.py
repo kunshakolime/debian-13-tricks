@@ -300,8 +300,10 @@ def main():
     log("objects registered")
 
     def emit_go_neg():
-        log("emitting GoNegRequest")
-        peer.GoNegRequest("none", "")
+        if not peer._props["Connected"]:
+            log("emitting GoNegRequest")
+            peer.GoNegRequest("none", "")
+            return True  # keep retrying until the sink accepts
         return False
 
     GLib.timeout_add(2000, emit_go_neg)

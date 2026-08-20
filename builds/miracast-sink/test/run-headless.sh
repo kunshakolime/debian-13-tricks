@@ -56,7 +56,7 @@ sleep 1
 
 # 3. app under Xvfb
 export G_MESSAGES_DEBUG=all
-export GST_DEBUG=2
+export GST_DEBUG="${GST_DEBUG:-2}"
 xvfb-run -a -s "-screen 0 800x600x24" "$APP" >"$APP_LOG" 2>&1 &
 XFB_PID=$!
 sleep 1
