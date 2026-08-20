@@ -272,12 +272,12 @@ def run_rtsp():
         log("handshake complete; starting RTP stream")
         subprocess.Popen([
             "gst-launch-1.0", "-q",
-            "videotestsrc", "num-buffers=-1",
-            "!", "x264enc", "tune=zerolatency", "!",
-            "h264parse", "!",
-            "mpegtsmux", "!",
-            "rtpmp2tpay", "!",
-            "udpsink", f"host={RTSP_HOST}", f"port={RTP_PORT}",
+            "videotestsrc", "is-live=true", "num-buffers=-1",
+            "!", "x264enc", "tune=zerolatency", "speed-preset=ultrafast", "bframes=0", "key-int-max=30",
+            "!", "h264parse", "config-interval=1",
+            "!", "mpegtsmux",
+            "!", "rtpmp2tpay",
+            "!", "udpsink", f"host={RTSP_HOST}", f"port={RTP_PORT}",
         ])
         time.sleep(20)
     except Exception as e:  # noqa: BLE001

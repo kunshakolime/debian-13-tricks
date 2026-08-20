@@ -85,8 +85,8 @@ rc=0
 check "mock owned bus name"        "owned org.freedesktop.miracle.wifi" "$MOCK_LOG"
 check "GoNegRequest emitted"       "emitting GoNegRequest"              "$MOCK_LOG"
 check "peer accepted (Connect)"    "Connect called"                     "$MOCK_LOG"
-check "RTSP handshake (SETUP)"     "sink SETUP"                         "$MOCK_LOG"
-check "RTSP handshake (PLAY)"      "sink PLAY"                          "$MOCK_LOG"
+check "RTSP handshake (SETUP)"     "RTSP << SETUP"                        "$MOCK_LOG"
+check "RTSP handshake (PLAY)"      "RTSP << PLAY"                         "$MOCK_LOG"
 check "RTP stream started"         "handshake complete"                 "$MOCK_LOG"
 
 if grep -q "GStreamer error" "$APP_LOG"; then
