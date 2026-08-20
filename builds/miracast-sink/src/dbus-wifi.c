@@ -383,10 +383,38 @@ msk_dbus_wifi_new (GError **error)
 {
   MskDbusWifi *self;
   GDBusConnection *conn;
+  GVariant *result;
+  gboolean owner;
 
   conn = g_bus_get_sync (G_BUS_TYPE_SYSTEM, NULL, error);
   if (!conn)
     return NULL;
+
+  result = g_dbus_connection_call_sync (conn,
+                                        "org.freedesktop.DBus",
+                                        "/org/freedesktop/DBus",
+                                        "org.freedesktop.DBus",
+                                        "NameHasOwner",
+                                        g_variant_new ("(s)", MSK_WIFI_BUS_NAME),
+                                        G_VARIANT_TYPE ("(b)"),
+                                        G_DBUS_CALL_FLAGS_NONE,
+                                        5000, NULL, error);
+  if (!result)
+    {
+      g_object_unref (conn);
+      return NULL;
+    }
+
+  g_variant_get (result, "(b)", &owner);
+  g_variant_unref (result);
+
+  if (!owner)
+    {
+      g_set_error (error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND,
+                   "miracle-wifid is not running");
+      g_object_unref (conn);
+      return NULL;
+    }
 
   self = g_object_new (MSK_TYPE_DBUS_WIFI, NULL);
   self->connection = conn;
