@@ -114,9 +114,18 @@ activate (GtkApplication *gtk_app, gpointer user_data)
   app->wifi = msk_dbus_wifi_new (&error);
   if (error)
     {
-      msk_window_set_status (app->window, "miracle-wifid not reachable");
+      AdwDialog *dialog;
+
       g_warning ("D-Bus: %s", error->message);
+
+      dialog = adw_alert_dialog_new ("MiracleCast not running",
+                                     "Could not connect to miracle-wifid. "
+                                     "Start it with: "
+                                     "sudo systemctl start miracast-wifid");
+      adw_alert_dialog_add_response (ADW_ALERT_DIALOG (dialog), "ok", "_OK");
+      adw_dialog_present (dialog, GTK_WIDGET (app->window));
       g_error_free (error);
+      return;
     }
 
   g_signal_connect (app->wifi, MSK_DBUS_WIFI_SIGNAL_LINK_ADDED,
