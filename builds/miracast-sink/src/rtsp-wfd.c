@@ -253,8 +253,9 @@ on_input (gpointer user_data)
 
   /* headers */
   {
-    gboolean more = TRUE;
-    while (more)
+    gint64 content_length = -1;
+
+    for (;;)
       {
         line = g_data_input_stream_read_line (self->input, &len, NULL, &error);
         if (error || !line)
@@ -266,10 +267,43 @@ on_input (gpointer user_data)
             msk_rtsp_wfd_disconnect (self);
             return G_SOURCE_REMOVE;
           }
+        if (len == 0)
+          {
+            g_free (line);
+            break;
+          }
         g_string_append (msg, line);
         g_string_append (msg, "\r\n");
+        if (g_ascii_strncasecmp (line, "Content-Length:", 15) == 0)
+          content_length = g_ascii_strtoll (line + 15, NULL, 10);
         g_free (line);
-        more = (len != 0);
+      }
+
+    /* read the message body so wfd_presentation_URL / wfd_trigger_method
+     * are visible to the handlers below */
+    if (content_length > 0)
+      {
+        gchar buf[1024];
+        gint64 remaining = content_length;
+
+        while (remaining > 0)
+          {
+            gsize want = MIN (remaining, (gint64) sizeof (buf));
+            gssize got = g_input_stream_read (
+                           G_INPUT_STREAM (self->input),
+                           buf, want, NULL, &error);
+            if (error || got <= 0)
+              {
+                g_clear_error (&error);
+                g_string_free (msg, TRUE);
+                if (self->running)
+                  g_signal_emit (self, signals[SIGNAL_STREAM_READY], 0);
+                msk_rtsp_wfd_disconnect (self);
+                return G_SOURCE_REMOVE;
+              }
+            g_string_append_len (msg, buf, got);
+            remaining -= got;
+          }
       }
   }
 
