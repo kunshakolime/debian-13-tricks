@@ -111,7 +111,8 @@ msk_window_init (MskWindow *self)
   gtk_box_append (box, viewport);
 
   adw_toolbar_view_set_content (toolbar, GTK_WIDGET (box));
-  gtk_window_set_child (GTK_WINDOW (self), GTK_WIDGET (toolbar));
+  adw_application_window_set_content (ADW_APPLICATION_WINDOW (self),
+                                      GTK_WIDGET (toolbar));
 
   gtk_window_set_default_size (GTK_WINDOW (self), 720, 480);
   gtk_window_set_title (GTK_WINDOW (self), "Miracast Sink");
