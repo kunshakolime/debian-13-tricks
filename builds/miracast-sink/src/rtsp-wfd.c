@@ -225,7 +225,7 @@ handle_reply (MskRtspWfd *self, const gchar *msg)
 /* ---- socket I/O ------------------------------------------------------- */
 
 static gboolean
-on_input (gpointer user_data)
+on_input (G_GNUC_UNUSED gpointer stream, gpointer user_data)
 {
   MskRtspWfd *self = MSK_RTSP_WFD (user_data);
   gchar *line;
@@ -270,6 +270,9 @@ on_input (gpointer user_data)
         if (len == 0)
           {
             g_free (line);
+            /* blank line: keep the header/body separator so message_body()
+             * and message_value() can find what they look for */
+            g_string_append (msg, "\r\n");
             break;
           }
         g_string_append (msg, line);
