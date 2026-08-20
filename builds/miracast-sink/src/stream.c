@@ -95,10 +95,6 @@ msk_stream_stop (MskStream *self)
 
   if (self->udpsrc)
     g_object_set (self->udpsrc, "port", self->port, NULL);
-
-  /* release dynamic pads on tsdemux so a restart works */
-  if (self->tsdemux)
-    gst_element_release_request_pad (self->tsdemux);
 }
 
 GdkPaintable *
