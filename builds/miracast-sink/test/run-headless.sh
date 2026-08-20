@@ -30,12 +30,24 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# 1. system bus
+# 1. system bus (session-mode daemon on the system socket: a --system daemon
+#    tries to drop capabilities, which containers forbid)
 mkdir -p /run/dbus
 chmod 1777 /run/dbus 2>/dev/null || true
-dbus-daemon --system --fork --print-address >"$WORK/dbus.addr" 2>&1
-DBUS_PID=$(pgrep -f "dbus-daemon --system" | head -1 || echo "")
-echo "[test] system dbus: $(cat "$WORK/dbus.addr" 2>/dev/null || echo started)"
+pkill -9 -f "dbus-daemon" 2>/dev/null
+pkill -9 -f "mock-wifid.py" 2>/dev/null
+sleep 0.5
+rm -f /run/dbus/pid /run/dbus/system_bus_socket
+setsid dbus-daemon --session --nofork --nopidfile \
+  --address=unix:path=/run/dbus/system_bus_socket >"$WORK/dbus.log" 2>&1 &
+DBUS_PID=$!
+sleep 1
+if [ ! -S /run/dbus/system_bus_socket ]; then
+  echo "[test] FAILED to start system dbus"
+  cat "$WORK/dbus.log"
+  exit 1
+fi
+echo "[test] system dbus: started (pid $DBUS_PID)"
 
 # 2. mock source
 python3 "$DIR/mock-wifid.py" >"$MOCK_LOG" 2>&1 &
