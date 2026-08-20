@@ -189,7 +189,8 @@ class RtsSink:
         self.conn = conn
 
     def wait_for(self, expect_prefix, label):
-        while True:
+        deadline = time.time() + 10
+        while time.time() < deadline:
             msg = read_message(self.conn)
             if msg is None:
                 raise RuntimeError(f"{label}: connection closed")
@@ -198,6 +199,7 @@ class RtsSink:
             if first.startswith(expect_prefix):
                 return msg
             log(f"RTSP (ignored) {first}")
+        raise RuntimeError(f"{label}: timed out waiting for {expect_prefix}")
 
     def m1_options(self):
         send(self.conn,
