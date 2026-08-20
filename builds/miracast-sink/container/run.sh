@@ -102,7 +102,7 @@ Section: net
 Priority: optional
 Architecture: amd64
 Maintainer: Debian 13 build <root@localhost>
-Depends: ${DEPS}, wpa-supplicant, gstreamer1.0-plugins-good, gstreamer1.0-plugins-bad, gstreamer1.0-libav
+Depends: ${DEPS}, wpasupplicant, gstreamer1.0-plugins-good, gstreamer1.0-plugins-bad, gstreamer1.0-libav
 Recommends: network-manager
 Homepage: https://github.com/albfan/miraclecast
 Description: GTK4 Miracast sink for Linux
