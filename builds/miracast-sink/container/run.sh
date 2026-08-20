@@ -6,7 +6,7 @@
 # is redone unless its output is missing.
 #
 # Stage 1: MiracleCast backend (miracle-wifid, miracle-sinkctl, ...)
-# Stage 2: GTK4 sink app — TODO: wired up once the app source lands.
+# Stage 2: GTK4 sink app (miracast-sink)
 
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
@@ -118,7 +118,7 @@ Description: GTK4 Miracast sink for Linux
   their screen to this computer over Wi-Fi Direct.
   .
   Backend: MiracleCast (miracle-wifid + miracle-sinkctl). Frontend: GTK4
-  (TODO: shipped in a later build once the app source is added).
+  (miracast-sink).
 EOF
 
 log "dpkg: building miracast-sink_${VERSION}_amd64.deb"
