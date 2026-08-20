@@ -1,0 +1,13 @@
+[Unit]
+Description=MiracleCast Wi-Fi Display daemon
+After=dbus.service network.target
+Wants=dbus.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/miracle-wifid
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
