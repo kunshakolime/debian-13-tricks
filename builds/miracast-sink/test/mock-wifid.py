@@ -37,15 +37,17 @@ def log(msg):
     print(f"[mock] {msg}", flush=True)
 
 
+_rtsp_buf = b""
+
 def read_message(conn):
-    """Read one RTSP message (status/request line + headers + body)."""
-    buf = b""
-    while b"\r\n\r\n" not in buf:
+    """Read one RTSP message, preserving leftover data across calls."""
+    global _rtsp_buf
+    while b"\r\n\r\n" not in _rtsp_buf:
         chunk = conn.recv(4096)
         if not chunk:
             return None
-        buf += chunk
-    header, _, rest = buf.partition(b"\r\n\r\n")
+        _rtsp_buf += chunk
+    header, _, rest = _rtsp_buf.partition(b"\r\n\r\n")
     content_length = 0
     for line in header.decode("utf-8", "replace").split("\r\n"):
         if line.lower().startswith("content-length:"):
@@ -56,6 +58,7 @@ def read_message(conn):
         if not chunk:
             break
         body += chunk
+    _rtsp_buf = body[content_length:]
     return (header + b"\r\n\r\n" + body[:content_length]).decode(
         "utf-8", "replace")
 
@@ -253,7 +256,9 @@ class RtsSink:
         log("RTSP >> 200 (PLAY reply)")
 
 
-def run_rtsp():
+def run_rtsp(stream_duration=20):
+    global _rtsp_buf
+    _rtsp_buf = b""
     srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     srv.bind((RTSP_HOST, RTSP_PORT))
@@ -271,7 +276,7 @@ def run_rtsp():
         log("handshake complete; waiting for pipeline to initialize")
         time.sleep(0.5)
         log("handshake complete; starting RTP stream")
-        subprocess.Popen([
+        gst = subprocess.Popen([
             "gst-launch-1.0", "-q",
             "videotestsrc", "is-live=true", "num-buffers=-1",
             "!", "x264enc", "tune=zerolatency", "speed-preset=ultrafast", "bframes=0", "key-int-max=30",
@@ -280,7 +285,11 @@ def run_rtsp():
             "!", "rtpmp2tpay",
             "!", "udpsink", f"host={RTSP_HOST}", f"port={RTP_PORT}",
         ])
-        time.sleep(20)
+        log(f"streaming for {stream_duration}s")
+        time.sleep(stream_duration)
+        gst.terminate()
+        gst.wait()
+        log("stream ended")
     except Exception as e:  # noqa: BLE001
         log(f"RTSP error: {e}")
     finally:
@@ -288,9 +297,13 @@ def run_rtsp():
 
 
 def main():
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--stream-duration", type=int, default=20)
+    args = parser.parse_args()
+
     dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
     bus = dbus.SystemBus()
-    # keep a reference: releasing the BusName object releases the bus name
     bus_name = dbus.service.BusName(BUS_NAME, bus, do_not_queue=True)
     assert bus_name
     log(f"owned {BUS_NAME}")
@@ -304,12 +317,13 @@ def main():
         if not peer._props["Connected"]:
             log("emitting GoNegRequest")
             peer.GoNegRequest("none", "")
-            return True  # keep retrying until the sink accepts
+            return True
         return False
 
     GLib.timeout_add(2000, emit_go_neg)
 
-    threading.Thread(target=run_rtsp, daemon=True).start()
+    threading.Thread(target=run_rtsp, daemon=True,
+                     kwargs={"stream_duration": args.stream_duration}).start()
 
     GLib.MainLoop().run()
 
