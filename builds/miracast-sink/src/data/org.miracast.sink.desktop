@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Miracast Sink
+GenericName=Wireless Display Receiver
+Comment=Receive Miracast streams and show them on this screen
+Exec=miracast-sink
+Icon=video-display-symbolic
+Terminal=false
+Categories=GTK;AudioVideo;Network;
+Keywords=miracast;wireless;display;cast;sink;screen;
