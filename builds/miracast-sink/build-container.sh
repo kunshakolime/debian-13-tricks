@@ -21,7 +21,7 @@ mkdir -p "$CACHE/miraclecast" "$CACHE/out"
 # 1. image
 if ! podman image exists "$IMAGE"; then
   log "Building image '$IMAGE' (Dockerfile)"
-  podman build -t "$IMAGE" -f "$SCRIPT_DIR/Dockerfile" "$SCRIPT_DIR"
+  podman build --progress=plain --log-level=debug -t "$IMAGE" -f "$SCRIPT_DIR/Dockerfile" "$SCRIPT_DIR"
 else
   log "Image '$IMAGE' cached"
 fi
