@@ -14,7 +14,7 @@ for arg in "$@"; do
     --clean) EXTRA_ARGS+=("--clean") ;;
     --image)
       IMAGE="miracast-deb13:latest"
-      podman build -t "$IMAGE" -f "$SCRIPT_DIR/Dockerfile" "$SCRIPT_DIR"
+      podman build --progress=plain --log-level=debug -t "$IMAGE" -f "$SCRIPT_DIR/Dockerfile" "$SCRIPT_DIR"
       ;;
     *) EXTRA_ARGS+=("$arg") ;;
   esac
