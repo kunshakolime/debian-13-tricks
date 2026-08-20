@@ -141,8 +141,6 @@ activate (GtkApplication *gtk_app, gpointer user_data)
   g_signal_connect (app->window, "disconnect-requested",
                     G_CALLBACK (on_disconnect_requested), app);
 
-  msk_window_show_video (app->window,
-                         msk_stream_get_paintable (app->stream));
   set_status (app, "Ready");
 
   gtk_window_present (GTK_WINDOW (app->window));
