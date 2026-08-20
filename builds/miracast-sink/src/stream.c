@@ -98,7 +98,7 @@ msk_stream_stop (MskStream *self)
 
   /* release dynamic pads on tsdemux so a restart works */
   if (self->tsdemux)
-    gst_element_release_request_pads (self->tsdemux);
+    gst_element_release_request_pad (self->tsdemux);
 }
 
 GdkPaintable *
@@ -133,6 +133,7 @@ msk_stream_class_init (MskStreamClass *klass)
 static void
 msk_stream_init (MskStream *self)
 {
+  (void) self;
 }
 
 MskStream *
