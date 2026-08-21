@@ -27,6 +27,11 @@ gboolean msk_chromecast_client_send_get_status (MskChromecastClient *self,
 gboolean msk_chromecast_client_send_launch (MskChromecastClient *self,
                                              const gchar *app_id,
                                              GError **error);
+gboolean msk_chromecast_client_send_message (MskChromecastClient *self,
+                                              const gchar *namespace,
+                                              const gchar *payload_utf8,
+                                              const gchar *destination_id,
+                                              GError **error);
 
 G_END_DECLS
 

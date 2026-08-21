@@ -45,7 +45,6 @@ on_device_found (MskChromecastDiscovery *discovery G_GNUC_UNUSED,
 
   g_debug ("Chromecast found: %s at %s:%u", device->name, device->host, device->port);
 
-  /* Auto-connect to first device found */
   if (!self->current_device)
     {
       self->current_device = device;
@@ -60,7 +59,7 @@ on_device_found (MskChromecastDiscovery *discovery G_GNUC_UNUSED,
 
 static void
 on_device_removed (MskChromecastDiscovery *discovery G_GNUC_UNUSED,
-                   MskChromecastDevice *device,
+                   MskChromecastDevice *device G_GNUC_UNUSED,
                    MskChromecastBackend *self)
 {
   if (self->current_device == device)
@@ -77,10 +76,7 @@ on_client_connected (MskChromecastClient *client, MskChromecastBackend *self)
 
   g_debug ("Connected to Chromecast");
 
-  /* Send CONNECT to receiver */
   msk_chromecast_client_send_connect (client, "receiver-0", NULL);
-
-  /* Get status */
   msk_chromecast_client_send_get_status (client, NULL);
 
   status = g_strdup_printf ("Connected to %s", self->current_device->name);
@@ -97,13 +93,21 @@ on_client_disconnected (MskChromecastClient *client G_GNUC_UNUSED, MskChromecast
 }
 
 static void
-on_client_message (MskChromecastClient *client G_GNUC_UNUSED, const gchar *message G_GNUC_UNUSED,
-                   MskChromecastBackend *self G_GNUC_UNUSED)
+on_client_message (MskChromecastClient *client G_GNUC_UNUSED,
+                   const gchar *namespace,
+                   const gchar *payload,
+                   MskChromecastBackend *self)
 {
-  /* Parse JSON message and handle status updates */
-  g_debug ("Chromecast message: %s", message);
+  g_debug ("Chromecast message [%s]: %s", namespace, payload);
 
-  /* TODO: Parse RECEIVER_STATUS to find transportId for media namespace */
+  if (g_strcmp0 (namespace, "urn:x-cast:com.google.cast.receiver") == 0)
+    {
+      msk_chromecast_media_update_status (self->media, payload);
+    }
+  else if (g_strcmp0 (namespace, "urn:x-cast:com.google.cast.media") == 0)
+    {
+      msk_chromecast_media_update_status (self->media, payload);
+    }
 }
 
 static void
@@ -147,7 +151,6 @@ msk_chromecast_backend_stop (MskBackend *backend)
 static GdkPaintable *
 msk_chromecast_backend_get_paintable (MskBackend *backend G_GNUC_UNUSED)
 {
-  /* Chromecast doesn't provide a local paintable - it renders on the TV */
   return NULL;
 }
 
