@@ -13,6 +13,16 @@ export DEBIAN_FRONTEND=noninteractive
 
 log() { printf '\n==> %s\n' "$*"; }
 
+# Install Chromecast deps if missing (avoids full image rebuild)
+if ! pkg-config --exists avahi-client 2>/dev/null; then
+  log "Installing Chromecast dependencies"
+  apt-get update -qq
+  apt-get install -y --no-install-recommends \
+    libavahi-client-dev libavahi-glib-dev \
+    libprotobuf-c-dev protobuf-compiler \
+    libjson-glib-dev
+fi
+
 # ---------------------------------------------------------------- MiracleCast
 if [ ! -d /build/out/build-miracle ]; then
   log "meson: configure miraclecast (prefix=/usr)"
