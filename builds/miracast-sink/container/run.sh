@@ -103,6 +103,17 @@ exit 0
 PI
 chmod 755 /build/out/debpkg/DEBIAN/postinst
 
+cat > /build/out/debpkg/DEBIAN/prerm <<'PRERM'
+#!/bin/sh
+set -e
+if [ "$1" = "remove" ] && [ -x /usr/bin/systemctl ]; then
+  systemctl stop miracast-wifid.service >/dev/null 2>&1 || true
+  systemctl disable miracast-wifid.service >/dev/null 2>&1 || true
+fi
+exit 0
+PRERM
+chmod 755 /build/out/debpkg/DEBIAN/prerm
+
 cat > /build/out/debpkg/usr/share/doc/miracast-sink/changelog.Debian <<CL
 miracast-sink (${VERSION}) trixie; urgency=medium
 
