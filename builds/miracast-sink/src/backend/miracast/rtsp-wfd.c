@@ -225,7 +225,7 @@ handle_reply (MskRtspWfd *self, const gchar *msg)
 /* ---- socket I/O ------------------------------------------------------- */
 
 static gboolean
-on_input (G_GNUC_UNUSED gpointer stream, gpointer user_data)
+on_input (gpointer user_data)
 {
   MskRtspWfd *self = MSK_RTSP_WFD (user_data);
   gchar *line;
@@ -352,7 +352,7 @@ on_connected (G_GNUC_UNUSED GObject *source, GAsyncResult *res,
                      G_POLLABLE_INPUT_STREAM (
                        g_io_stream_get_input_stream (G_IO_STREAM (self->conn))),
                      NULL);
-  g_source_set_callback (self->io_source, (GSourceFunc) on_input, self, NULL);
+  g_source_set_callback (self->io_source, on_input, self, NULL);
   g_source_attach (self->io_source, NULL);
 }
 

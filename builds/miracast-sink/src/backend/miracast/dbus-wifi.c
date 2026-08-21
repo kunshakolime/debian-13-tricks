@@ -75,7 +75,7 @@ get_str_prop (GDBusConnection *conn,
   return out;
 }
 
-static gboolean
+static gboolean G_GNUC_UNUSED
 get_bool_prop (GDBusConnection *conn,
                const gchar *path,
                const gchar *iface,
@@ -369,7 +369,7 @@ watch_signals (MskDbusWifi *self)
                                       on_interfaces_added, self, NULL);
 }
 
-static void
+static void G_GNUC_UNUSED
 on_bus_acquired (GDBusConnection *connection, const gchar *name G_GNUC_UNUSED,
                  gpointer user_data)
 {
