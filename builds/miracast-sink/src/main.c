@@ -18,7 +18,7 @@ set_status (App *app, const char *status)
 }
 
 static void
-on_connected (MskBackend *backend, const char *device_name, App *app)
+on_connected (MskBackend *backend G_GNUC_UNUSED, const char *device_name, App *app)
 {
   gchar *status;
 
@@ -31,7 +31,7 @@ on_connected (MskBackend *backend, const char *device_name, App *app)
 }
 
 static void
-on_disconnected (MskBackend *backend, App *app)
+on_disconnected (MskBackend *backend G_GNUC_UNUSED, App *app)
 {
   msk_window_clear_video (app->window);
   msk_window_set_device (app->window, "");
@@ -39,13 +39,13 @@ on_disconnected (MskBackend *backend, App *app)
 }
 
 static void
-on_status_changed (MskBackend *backend, const char *status, App *app)
+on_status_changed (MskBackend *backend G_GNUC_UNUSED, const char *status, App *app)
 {
   set_status (app, status);
 }
 
 static void
-on_disconnect_requested (MskWindow *window, App *app)
+on_disconnect_requested (MskWindow *window G_GNUC_UNUSED, App *app)
 {
   msk_backend_stop (app->backend);
   msk_window_clear_video (app->window);

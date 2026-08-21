@@ -17,6 +17,8 @@ struct _MskChromecastDiscovery
   GList *devices;
 };
 
+G_DEFINE_TYPE (MskChromecastDiscovery, msk_chromecast_discovery, G_TYPE_OBJECT)
+
 enum
 {
   SIGNAL_DEVICE_FOUND,
@@ -25,13 +27,6 @@ enum
 };
 
 static guint signals[N_SIGNALS];
-
-static void
-free_device_list (MskChromecastDiscovery *self)
-{
-  g_list_free_full (self->devices, (GDestroyNotify) msk_chromecast_device_free);
-  self->devices = NULL;
-}
 
 void
 msk_chromecast_device_free (MskChromecastDevice *device)
@@ -63,14 +58,14 @@ find_device_by_name (MskChromecastDiscovery *self, const gchar *name)
 
 static void
 resolve_callback (
-  AvahiServiceResolver *resolver,
+  AvahiServiceResolver *resolver G_GNUC_UNUSED,
   G_GNUC_UNUSED AvahiIfIndex interface,
   G_GNUC_UNUSED AvahiProtocol protocol,
   AvahiResolverEvent event,
   const char *name,
-  const char *type,
-  const char *domain,
-  const char *host_name,
+  const char *type G_GNUC_UNUSED,
+  const char *domain G_GNUC_UNUSED,
+  const char *host_name G_GNUC_UNUSED,
   const AvahiAddress *address,
   uint16_t port,
   AvahiStringList *txt,
@@ -78,11 +73,11 @@ resolve_callback (
   gpointer userdata)
 {
   MskChromecastDiscovery *self = MSK_CHROMECAST_DISCOVERY (userdata);
+  char addr[AVAHI_ADDRESS_STR_MAX];
 
   if (event != AVAHI_RESOLVER_FOUND)
     return;
 
-  /* Check if we already have this device */
   if (!find_device_by_name (self, name))
     {
       MskChromecastDevice *device;
@@ -90,7 +85,6 @@ resolve_callback (
       gchar *id = NULL;
       gchar *model = NULL;
 
-      /* Parse TXT record for id and model */
       for (entry = txt; entry; entry = entry->next)
         {
           gchar *key;
@@ -108,9 +102,11 @@ resolve_callback (
             }
         }
 
+      avahi_address_snprint (addr, sizeof (addr), address);
+
       device = g_new0 (MskChromecastDevice, 1);
       device->name = g_strdup (name);
-      device->host = avahi_address_snprintf (address);
+      device->host = g_strdup (addr);
       device->port = port;
       device->id = id ? id : g_strdup ("");
       device->model = model ? model : g_strdup ("");
@@ -123,13 +119,13 @@ resolve_callback (
 
 static void
 browse_callback (
-  AvahiServiceBrowser *browser,
+  AvahiServiceBrowser *browser G_GNUC_UNUSED,
   AvahiIfIndex interface,
   AvahiProtocol protocol,
   AvahiBrowserEvent event,
   const char *name,
-  const char *type,
-  const char *domain,
+  const char *type G_GNUC_UNUSED,
+  const char *domain G_GNUC_UNUSED,
   G_GNUC_UNUSED AvahiLookupResultFlags flags,
   gpointer userdata)
 {
@@ -138,11 +134,15 @@ browse_callback (
 
   switch (event)
     {
-    case AVAHI_BROWSER_FOUND:
+    case AVAHI_BROWSER_FAILURE:
+      g_warning ("Avahi browse failure");
+      break;
+
+    case AVAHI_BROWSER_NEW:
       resolver = avahi_service_resolver_new (self->client,
                                              interface, protocol,
-                                             name, type, domain,
-                                             AVAHI_UNSPEC, 0,
+                                             name, "_googlecast._tcp", domain,
+                                             AVAHI_IF_UNSPEC, 0,
                                              resolve_callback, self);
       if (resolver)
         avahi_service_resolver_free (resolver);
@@ -189,8 +189,6 @@ client_callback (AvahiClient *client, AvahiClientState state, gpointer userdata)
 
     case AVAHI_CLIENT_S_COLLISION:
     case AVAHI_CLIENT_S_REGISTERING:
-    case AVAHI_CLIENT_S_CONNECTING:
-    case AVAHI_CLIENT_S_FAILURE:
       if (self->browser)
         {
           avahi_service_browser_free (self->browser);
@@ -198,7 +196,13 @@ client_callback (AvahiClient *client, AvahiClientState state, gpointer userdata)
         }
       break;
 
-    default:
+    case AVAHI_CLIENT_CONNECTING:
+    case AVAHI_CLIENT_FAILURE:
+      if (self->browser)
+        {
+          avahi_service_browser_free (self->browser);
+          self->browser = NULL;
+        }
       break;
     }
 }
@@ -209,7 +213,8 @@ msk_chromecast_discovery_finalize (GObject *object)
   MskChromecastDiscovery *self = MSK_CHROMECAST_DISCOVERY (object);
 
   msk_chromecast_discovery_stop (self);
-  free_device_list (self);
+  g_list_free_full (self->devices, (GDestroyNotify) msk_chromecast_device_free);
+  self->devices = NULL;
 
   G_OBJECT_CLASS (msk_chromecast_discovery_parent_class)->finalize (object);
 }
@@ -235,7 +240,7 @@ msk_chromecast_discovery_class_init (MskChromecastDiscoveryClass *klass)
 }
 
 static void
-msk_chromecast_discovery_init (MskChromecastDiscovery *self)
+msk_chromecast_discovery_init (MskChromecastDiscovery *self G_GNUC_UNUSED)
 {
 }
 

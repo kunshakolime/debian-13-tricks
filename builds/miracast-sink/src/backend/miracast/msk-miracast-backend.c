@@ -65,7 +65,7 @@ on_link_added (MskDbusWifi *wifi, const char *path, const char *name,
 
 static void
 on_peer_go_neg (MskDbusWifi *wifi G_GNUC_UNUSED, const char *peer_path,
-                const char *prov G_GNUC_UNUSED, const char *pin G_GNUC_UNUSED, MskMiracastBackend *self)
+                const char *prov G_GNUC_UNUSED, const char *pin G_GNUC_UNUSED, MskMiracastBackend *self G_GNUC_UNUSED)
 {
   g_debug ("GO-NEG from %s (%s/%s), auto-accepting", peer_path, prov, pin);
   msk_dbus_wifi_accept_peer (wifi, peer_path);

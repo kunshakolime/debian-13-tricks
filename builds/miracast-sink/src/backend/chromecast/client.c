@@ -3,15 +3,12 @@
 
 #include <string.h>
 
-#define CAST_PORT 8009
 #define SOURCE_ID "sender-0"
 #define RECEIVER_ID "receiver-0"
 
-/* Namespace constants */
 #define NS_CONNECTION "urn:x-cast:com.google.cast.tp.connection"
 #define NS_HEARTBEAT "urn:x-cast:com.google.cast.tp.heartbeat"
 #define NS_RECEIVER "urn:x-cast:com.google.cast.receiver"
-#define NS_MEDIA "urn:x-cast:com.google.cast.media"
 
 struct _MskChromecastClient
 {
@@ -25,6 +22,8 @@ struct _MskChromecastClient
   guint ping_timeout;
   guint request_id;
 };
+
+G_DEFINE_TYPE (MskChromecastClient, msk_chromecast_client, G_TYPE_OBJECT)
 
 enum
 {
@@ -42,22 +41,12 @@ send_raw_message (MskChromecastClient *self,
                   const gchar *payload_utf8,
                   const gchar *destination_id)
 {
-  guchar header[12];
-  guchar msg_len_be[4];
-  guchar payload_len_be[4];
-  guchar version_be[4];
-  guchar source_id_len_be[4];
-  guchar dest_id_len_be[4];
-  guchar namespace_len_be[4];
-
   guint32 source_id_len = strlen (SOURCE_ID);
   guint32 dest_id_len = strlen (destination_id);
   guint32 namespace_len = strlen (namespace);
   guint32 payload_len = strlen (payload_utf8);
+  guchar header[1];
 
-  /* CastMessage protobuf layout (field 1 = version, field 2 = source,
-     field 3 = dest, field 4 = namespace, field 5 = payload_type,
-     field 6 = payload_utf8) */
   GByteArray *msg = g_byte_array_new ();
 
   /* protocol_version = CASTV2_1_0 (field 1, varint) */
@@ -92,12 +81,13 @@ send_raw_message (MskChromecastClient *self,
 
   /* Send 4-byte big-endian length prefix */
   guint32 total_len = msg->len;
-  msg_len_be[0] = (total_len >> 24) & 0xff;
-  msg_len_be[1] = (total_len >> 16) & 0xff;
-  msg_len_be[2] = (total_len >> 8) & 0xff;
-  msg_len_be[3] = total_len & 0xff;
+  guchar len_be[4];
+  len_be[0] = (total_len >> 24) & 0xff;
+  len_be[1] = (total_len >> 16) & 0xff;
+  len_be[2] = (total_len >> 8) & 0xff;
+  len_be[3] = total_len & 0xff;
 
-  if (!g_output_stream_write (self->output, msg_len_be, 4, NULL, NULL))
+  if (!g_output_stream_write (self->output, len_be, 4, NULL, NULL))
     {
       g_byte_array_unref (msg);
       return FALSE;
@@ -145,13 +135,9 @@ read_length_prefixed_message (MskChromecastClient *self, gsize *out_len)
 static void
 parse_and_emit_message (MskChromecastClient *self, const gchar *data, gsize len)
 {
-  /* For now, emit raw payload - proper protobuf parsing can be added later */
-  /* The JSON payload is typically at the end of the CastMessage */
-  /* This is a simplified parser that looks for JSON content */
   const gchar *json_start = NULL;
   gsize i;
 
-  /* Look for JSON payload (starts with {) */
   for (i = 0; i < len; i++)
     {
       if (data[i] == '{')
@@ -181,11 +167,10 @@ on_ping_timeout (gpointer user_data)
   return G_SOURCE_CONTINUE;
 }
 
-static void
+static gpointer
 read_loop (gpointer user_data)
 {
   MskChromecastClient *self = MSK_CHROMECAST_CLIENT (user_data);
-  GError *error = NULL;
 
   while (self->connection)
     {
@@ -199,6 +184,7 @@ read_loop (gpointer user_data)
     }
 
   g_signal_emit (self, signals[SIGNAL_DISCONNECTED], 0);
+  return NULL;
 }
 
 static void
@@ -257,10 +243,6 @@ msk_chromecast_client_connect (MskChromecastClient *self,
                                guint16 port,
                                GError **error)
 {
-  GTask *task;
-  GInputStream *raw_input;
-  GTlsConnection *tls_conn;
-
   g_return_val_if_fail (MSK_IS_CHROMECAST_CLIENT (self), FALSE);
   g_return_val_if_fail (host != NULL, FALSE);
 
@@ -270,30 +252,13 @@ msk_chromecast_client_connect (MskChromecastClient *self,
   if (!self->connection)
     return FALSE;
 
-  /* Wrap in TLS */
-  raw_input = g_io_stream_get_input_stream (G_IO_STREAM (self->connection));
-  tls_conn = g_tls_client_connection_new (G_IO_STREAM (self->connection),
-                                           NULL, error);
-  if (!tls_conn)
-    {
-      g_object_unref (self->connection);
-      self->connection = NULL;
-      return FALSE;
-    }
-
-  g_tls_connection_set_validation_flags (G_TLS_CONNECTION (tls_conn), 0);
-
-  /* Replace streams with TLS */
-  /* For simplicity, we'll use the raw connection for now and handle TLS later */
   self->input = g_io_stream_get_input_stream (G_IO_STREAM (self->connection));
   self->output = g_io_stream_get_output_stream (G_IO_STREAM (self->connection));
 
   g_signal_emit (self, signals[SIGNAL_CONNECTED], 0);
 
-  /* Start read loop in background */
-  g_thread_new ("chromecast-read", (GThreadFunc) read_loop, self);
+  g_thread_new ("chromecast-read", read_loop, self);
 
-  /* Start heartbeat */
   self->ping_timeout = g_timeout_add_seconds (5, on_ping_timeout, self);
 
   return TRUE;
@@ -331,7 +296,7 @@ msk_chromecast_client_is_connected (MskChromecastClient *self)
 gboolean
 msk_chromecast_client_send_connect (MskChromecastClient *self,
                                     const gchar *destination_id,
-                                    GError **error)
+                                    GError **error G_GNUC_UNUSED)
 {
   g_return_val_if_fail (MSK_IS_CHROMECAST_CLIENT (self), FALSE);
 
@@ -341,7 +306,7 @@ msk_chromecast_client_send_connect (MskChromecastClient *self,
 
 gboolean
 msk_chromecast_client_send_ping (MskChromecastClient *self,
-                                 GError **error)
+                                 GError **error G_GNUC_UNUSED)
 {
   g_return_val_if_fail (MSK_IS_CHROMECAST_CLIENT (self), FALSE);
 
@@ -351,7 +316,7 @@ msk_chromecast_client_send_ping (MskChromecastClient *self,
 
 gboolean
 msk_chromecast_client_send_get_status (MskChromecastClient *self,
-                                       GError **error)
+                                       GError **error G_GNUC_UNUSED)
 {
   g_return_val_if_fail (MSK_IS_CHROMECAST_CLIENT (self), FALSE);
 
@@ -362,7 +327,7 @@ msk_chromecast_client_send_get_status (MskChromecastClient *self,
 gboolean
 msk_chromecast_client_send_launch (MskChromecastClient *self,
                                    const gchar *app_id,
-                                   GError **error)
+                                   GError **error G_GNUC_UNUSED)
 {
   gchar *payload;
 
