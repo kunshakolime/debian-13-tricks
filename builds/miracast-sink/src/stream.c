@@ -24,7 +24,7 @@ struct _MskStream
 G_DEFINE_TYPE (MskStream, msk_stream, G_TYPE_OBJECT)
 
 static void
-on_bus_error (GstBus *bus, GstMessage *msg, gpointer user_data)
+on_bus_error (GstBus *bus G_GNUC_UNUSED, GstMessage *msg, gpointer user_data G_GNUC_UNUSED)
 {
   GError *err = NULL;
   gchar *dbg = NULL;
@@ -37,13 +37,13 @@ on_bus_error (GstBus *bus, GstMessage *msg, gpointer user_data)
 }
 
 static void
-on_bus_eos (GstBus *bus, GstMessage *msg, gpointer user_data)
+on_bus_eos (GstBus *bus G_GNUC_UNUSED, GstMessage *msg G_GNUC_UNUSED, gpointer user_data G_GNUC_UNUSED)
 {
   g_debug ("GStreamer EOS");
 }
 
 static void
-on_tsdemux_pad_added (GstElement *src, GstPad *new_pad, gpointer user_data)
+on_tsdemux_pad_added (GstElement *src G_GNUC_UNUSED, GstPad *new_pad, gpointer user_data)
 {
   MskStream *self = MSK_STREAM (user_data);
   GstPad *sink_pad = NULL;

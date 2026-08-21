@@ -173,11 +173,11 @@ peer_call (MskDbusWifi *self, const gchar *peer_path, const gchar *method)
 /* ---- signal handlers -------------------------------------------------- */
 
 static void
-on_peer_go_neg (GDBusConnection *connection,
-                const gchar *sender,
+on_peer_go_neg (GDBusConnection *connection G_GNUC_UNUSED,
+                const gchar *sender G_GNUC_UNUSED,
                 const gchar *path,
-                const gchar *iface,
-                const gchar *signal,
+                const gchar *iface G_GNUC_UNUSED,
+                const gchar *signal G_GNUC_UNUSED,
                 GVariant *params,
                 gpointer user_data)
 {
@@ -189,11 +189,11 @@ on_peer_go_neg (GDBusConnection *connection,
 }
 
 static void
-on_peer_properties_changed (GDBusConnection *connection,
-                            const gchar *sender,
+on_peer_properties_changed (GDBusConnection *connection G_GNUC_UNUSED,
+                            const gchar *sender G_GNUC_UNUSED,
                             const gchar *path,
                             const gchar *iface,
-                            const gchar *signal,
+                            const gchar *signal G_GNUC_UNUSED,
                             GVariant *params,
                             gpointer user_data)
 {
@@ -237,11 +237,11 @@ on_peer_properties_changed (GDBusConnection *connection,
 }
 
 static void
-on_interfaces_added (GDBusConnection *connection,
-                     const gchar *sender,
+on_interfaces_added (GDBusConnection *connection G_GNUC_UNUSED,
+                     const gchar *sender G_GNUC_UNUSED,
                      const gchar *path,
-                     const gchar *iface,
-                     const gchar *signal,
+                     const gchar *iface G_GNUC_UNUSED,
+                     const gchar *signal G_GNUC_UNUSED,
                      GVariant *params,
                      gpointer user_data)
 {
@@ -370,7 +370,7 @@ watch_signals (MskDbusWifi *self)
 }
 
 static void
-on_bus_acquired (GDBusConnection *connection, const gchar *name,
+on_bus_acquired (GDBusConnection *connection, const gchar *name G_GNUC_UNUSED,
                  gpointer user_data)
 {
   MskDbusWifi *self = MSK_DBUS_WIFI (user_data);
@@ -547,6 +547,6 @@ msk_dbus_wifi_class_init (MskDbusWifiClass *klass)
 }
 
 static void
-msk_dbus_wifi_init (MskDbusWifi *self)
+msk_dbus_wifi_init (MskDbusWifi *self G_GNUC_UNUSED)
 {
 }
