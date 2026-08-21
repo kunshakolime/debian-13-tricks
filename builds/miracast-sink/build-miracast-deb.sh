@@ -4,7 +4,7 @@
 #   ./build-miracast-deb.sh [OUTDIR]    # incremental build (fast)
 #   ./build-miracast-deb.sh --rebuild   # nuke everything: container, image, and compiled artifacts
 #   ./build-miracast-deb.sh --recompile # wipe only compiled artifacts (keep container + image)
-#   ./build-miracast-deb.sh --reimage   # rebuild just the Docker image (keep compiled artifacts)
+#   ./build-miracast-deb.sh --reimage   # rebuild image + recreate container (keep source cache)
 
 set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -30,8 +30,8 @@ if [ "$REBUILD" -eq 1 ]; then
   "$SCRIPT_DIR/build-container.sh" --fresh
   DEB_ARGS+=("--clean")
 elif [ "$REIMAGE" -eq 1 ]; then
-  IMAGE="miracast-deb13:latest"
-  podman build --progress=plain -t "$IMAGE" -f "$SCRIPT_DIR/Dockerfile" "$SCRIPT_DIR"
+  "$SCRIPT_DIR/build-container.sh" --refresh
+  DEB_ARGS+=("--clean")
 fi
 
 "$SCRIPT_DIR/build-deb.sh" "${DEB_ARGS[@]}"
