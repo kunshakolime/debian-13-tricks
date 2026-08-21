@@ -19,7 +19,7 @@ if ! pkg-config --exists avahi-client 2>/dev/null; then
   apt-get update -qq
   apt-get install -y --no-install-recommends \
     libavahi-client-dev libavahi-glib-dev \
-    libprotobuf-c-dev protobuf-compiler \
+    libprotobuf-c-dev protobuf-compiler protobuf-c-compiler \
     libjson-glib-dev
 fi
 
