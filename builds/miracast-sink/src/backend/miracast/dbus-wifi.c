@@ -411,7 +411,7 @@ msk_dbus_wifi_new (GError **error)
   if (!owner)
     {
       g_set_error (error, G_IO_ERROR, G_IO_ERROR_NOT_FOUND,
-                   "miracast-wifid.service is not running.  Start it with: systemctl start miracast-wifid.service");
+                   "miracast-wifid is not running.  Start it with: systemctl start miracast-wifid");
       g_object_unref (conn);
       return NULL;
     }
