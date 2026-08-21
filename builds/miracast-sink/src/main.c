@@ -68,7 +68,7 @@ on_disconnect_requested (MskWindow *window G_GNUC_UNUSED, App *app)
 }
 
 static void
-activate (GtkApplication *gtk_app G_GNUC_UNUSED, gpointer user_data)
+activate (GtkApplication *gtk_app G_GNUC_UNUSED, gpointer user_data G_GNUC_UNUSED)
 {
   App *app = g_new0 (App, 1);
 
