@@ -30,10 +30,11 @@ rm -rf /build/out/stage
 DESTDIR=/build/out/stage meson install -C /build/out/build-miracle --no-rebuild
 
 # -------------------------------------------------------- protobuf code gen
-log "protobuf-c: generating cast_channel.pb-c.h/c"
+log "protoc: generating cast_channel.pb-c.h/c"
 mkdir -p /appsrc/backend/chromecast
-protoc-c --c_out=/appsrc/backend/chromecast \
-  /appsrc/backend/chromecast/cast_channel.proto
+protoc --proto_path=/appsrc/backend/chromecast \
+       --c_out=/appsrc/backend/chromecast \
+       /appsrc/backend/chromecast/cast_channel.proto
 
 # ------------------------------------------------------------------- GTK4 app
 if [ ! -d /build/out/build-app ]; then
