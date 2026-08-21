@@ -18,7 +18,7 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev \
     gstreamer1.0-plugins-good gstreamer1.0-plugins-bad gstreamer1.0-libav \
     libavahi-client-dev libavahi-glib-dev \
-    libprotobuf-c-dev protobuf-compiler \
+    libprotobuf-c-dev protobuf-compiler protobuf-c-compiler \
     libjson-glib-dev \
     blueprint-compiler desktop-file-utils appstream gettext dpkg-dev \
  && rm -rf /var/lib/apt/lists/*
