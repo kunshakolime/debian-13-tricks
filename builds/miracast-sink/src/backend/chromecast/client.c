@@ -184,6 +184,15 @@ decode_cast_message (const guint8 *data, gsize len,
 
 /* ---- TLS: skip cert verification --------------------------------------- */
 
+static gboolean
+on_accept_certificate (GTlsConnection *tls G_GNUC_UNUSED,
+                       GTlsCertificate *cert G_GNUC_UNUSED,
+                       GTlsCertificateFlags errors G_GNUC_UNUSED,
+                       gpointer user_data G_GNUC_UNUSED)
+{
+  return TRUE;
+}
+
 static void
 on_socket_client_event (GSocketClient *client G_GNUC_UNUSED,
                         GSocketClientEvent event,
@@ -192,9 +201,8 @@ on_socket_client_event (GSocketClient *client G_GNUC_UNUSED,
 {
   if (event == G_SOCKET_CLIENT_TLS_HANDSHAKING)
     {
-      GTlsClientConnection *tls = G_TLS_CLIENT_CONNECTION (connection);
-      if (tls)
-        g_tls_client_connection_set_validation_flags (tls, 0);
+      g_signal_connect (connection, "accept-certificate",
+                        G_CALLBACK (on_accept_certificate), NULL);
     }
 }
 
