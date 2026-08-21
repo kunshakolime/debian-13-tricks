@@ -115,6 +115,8 @@ main (int argc, char **argv)
   GtkApplication *app;
   int status;
   gboolean chromecast = FALSE;
+  GOptionContext *ctx;
+  GError *err = NULL;
 
   GOptionEntry entries[] = {
     { "chromecast", 0, 0, G_OPTION_ARG_NONE, &chromecast,
@@ -124,10 +126,17 @@ main (int argc, char **argv)
 
   gst_init (&argc, &argv);
 
-  app = gtk_application_new (MSK_APP_ID, G_APPLICATION_DEFAULT_FLAGS);
-  g_option_context_add_main_entries (
-    g_application_option_context (G_APPLICATION (app)), entries, NULL);
+  ctx = g_option_context_new ("- Miracast/Chromecast sink");
+  g_option_context_add_main_entries (ctx, entries, NULL);
+  g_option_context_parse (ctx, &argc, &argv, &err);
+  g_option_context_free (ctx);
+  if (err)
+    {
+      g_warning ("%s", err->message);
+      g_error_free (err);
+    }
 
+  app = gtk_application_new (MSK_APP_ID, G_APPLICATION_DEFAULT_FLAGS);
   g_object_set_data (G_OBJECT (app), "chromecast", GINT_TO_POINTER (chromecast));
   g_signal_connect (app, "activate", G_CALLBACK (activate), NULL);
 
