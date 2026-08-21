@@ -94,6 +94,7 @@ set -e
 if [ -x /usr/bin/systemctl ]; then
   systemctl daemon-reload >/dev/null 2>&1 || true
   systemctl enable miracast-wifid.service >/dev/null 2>&1 || true
+  systemctl start  miracast-wifid.service >/dev/null 2>&1 || true
 fi
 if [ -x /usr/bin/update-desktop-database ]; then
   update-desktop-database /usr/share/applications >/dev/null 2>&1 || true
