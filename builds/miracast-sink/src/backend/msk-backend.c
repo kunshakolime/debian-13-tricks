@@ -5,10 +5,6 @@ G_DEFINE_INTERFACE (MskBackend, msk_backend, G_TYPE_OBJECT)
 static void
 msk_backend_default_init (MskBackendInterface *iface)
 {
-  g_object_interface_install_property (iface,
-    g_param_spec_string ("name", "Name", "Backend name",
-                         NULL,
-                         G_PARAM_READABLE | G_PARAM_STATIC_STRINGS));
 }
 
 void
