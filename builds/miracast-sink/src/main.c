@@ -122,18 +122,17 @@ main (int argc, char **argv)
     { NULL }
   };
 
-  GOptionContext *ctx = g_option_context_new ("- Miracast/Chromecast sink");
-  g_option_context_add_main_entries (ctx, entries, NULL);
-
   gst_init (&argc, &argv);
 
   app = gtk_application_new (MSK_APP_ID, G_APPLICATION_DEFAULT_FLAGS);
+  g_option_context_add_main_entries (
+    g_application_option_context (G_APPLICATION (app)), entries, NULL);
+
   g_object_set_data (G_OBJECT (app), "chromecast", GINT_TO_POINTER (chromecast));
   g_signal_connect (app, "activate", G_CALLBACK (activate), NULL);
 
   status = g_application_run (G_APPLICATION (app), argc, argv);
   g_object_unref (app);
-  g_option_context_free (ctx);
 
   return status;
 }
