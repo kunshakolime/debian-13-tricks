@@ -22,7 +22,7 @@ enum
 };
 
 static void
-on_disconnect_clicked (GtkButton *button, gpointer user_data)
+on_disconnect_clicked (GtkButton *button G_GNUC_UNUSED, gpointer user_data)
 {
   MskWindow *self = MSK_WINDOW (user_data);
 
