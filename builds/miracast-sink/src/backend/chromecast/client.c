@@ -175,7 +175,7 @@ decode_cast_message (const guint8 *data, gsize len,
   if (out_dest_id)
     *out_dest_id = g_strdup (msg->destination_id ? msg->destination_id : "");
 
-  if (msg->has_payload_utf8)
+  if (msg->payload_utf8)
     payload = g_strdup (msg->payload_utf8);
 
   cast_channel__cast_message__free_unpacked (msg, NULL);
