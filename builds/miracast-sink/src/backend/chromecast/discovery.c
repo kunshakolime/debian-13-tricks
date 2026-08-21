@@ -181,7 +181,7 @@ client_callback (AvahiClient *client, AvahiClientState state, gpointer userdata)
     case AVAHI_CLIENT_S_RUNNING:
       self->browser = avahi_service_browser_new (client,
                                                  AVAHI_IF_UNSPEC,
-                                                 AVAHI_UNSPEC,
+                                                 AVAHI_PROTOCOL_UNSPEC,
                                                  "_googlecast._tcp",
                                                  NULL, 0,
                                                  browse_callback, self);
@@ -253,21 +253,20 @@ msk_chromecast_discovery_new (void)
 void
 msk_chromecast_discovery_start (MskChromecastDiscovery *self)
 {
-  GError *error = NULL;
+  int error;
 
   if (self->client)
     return;
 
-  self->glib_poll = avahi_glib_poll_new (NULL, GLIB_MAIN_CONTEXT_DEFAULT);
+  self->glib_poll = avahi_glib_poll_new (NULL, NULL);
   self->client = avahi_client_new (avahi_glib_poll_get (self->glib_poll),
                                    0, client_callback, self, &error);
 
   if (!self->client)
     {
-      g_warning ("Avahi client failed: %s", error ? error->message : "unknown");
+      g_warning ("Avahi client failed: error %d", error);
       avahi_glib_poll_free (self->glib_poll);
       self->glib_poll = NULL;
-      g_clear_error (&error);
     }
 }
 
