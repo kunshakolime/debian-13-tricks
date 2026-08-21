@@ -37,7 +37,7 @@ set_status (MskChromecastBackend *self, const char *status)
 }
 
 static void
-on_device_found (MskChromecastDiscovery *discovery,
+on_device_found (MskChromecastDiscovery *discovery G_GNUC_UNUSED,
                  MskChromecastDevice *device,
                  MskChromecastBackend *self)
 {
@@ -59,7 +59,7 @@ on_device_found (MskChromecastDiscovery *discovery,
 }
 
 static void
-on_device_removed (MskChromecastDiscovery *discovery,
+on_device_removed (MskChromecastDiscovery *discovery G_GNUC_UNUSED,
                    MskChromecastDevice *device,
                    MskChromecastBackend *self)
 {
@@ -90,15 +90,15 @@ on_client_connected (MskChromecastClient *client, MskChromecastBackend *self)
 }
 
 static void
-on_client_disconnected (MskChromecastClient *client, MskChromecastBackend *self)
+on_client_disconnected (MskChromecastClient *client G_GNUC_UNUSED, MskChromecastBackend *self)
 {
   g_signal_emit (self, signals[SIGNAL_DISCONNECTED], 0);
   set_status (self, "Disconnected");
 }
 
 static void
-on_client_message (MskChromecastClient *client, const gchar *message,
-                   MskChromecastBackend *self)
+on_client_message (MskChromecastClient *client G_GNUC_UNUSED, const gchar *message G_GNUC_UNUSED,
+                   MskChromecastBackend *self G_GNUC_UNUSED)
 {
   /* Parse JSON message and handle status updates */
   g_debug ("Chromecast message: %s", message);
@@ -145,14 +145,14 @@ msk_chromecast_backend_stop (MskBackend *backend)
 }
 
 static GdkPaintable *
-msk_chromecast_backend_get_paintable (MskBackend *backend)
+msk_chromecast_backend_get_paintable (MskBackend *backend G_GNUC_UNUSED)
 {
   /* Chromecast doesn't provide a local paintable - it renders on the TV */
   return NULL;
 }
 
 static const char *
-msk_chromecast_backend_get_name (MskBackend *backend)
+msk_chromecast_backend_get_name (MskBackend *backend G_GNUC_UNUSED)
 {
   return "Chromecast";
 }
@@ -203,7 +203,7 @@ msk_chromecast_backend_class_init (MskChromecastBackendClass *klass)
 }
 
 static void
-msk_chromecast_backend_init (MskChromecastBackend *self)
+msk_chromecast_backend_init (MskChromecastBackend *self G_GNUC_UNUSED)
 {
 }
 
