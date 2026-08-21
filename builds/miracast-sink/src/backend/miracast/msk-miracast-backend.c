@@ -89,7 +89,7 @@ on_peer_connected (MskDbusWifi *wifi, const char *peer_path,
 }
 
 static void
-on_peer_disconnected (MskDbusWifi *wifi, const char *peer_path,
+on_peer_disconnected (MskDbusWifi *wifi G_GNUC_UNUSED, const char *peer_path G_GNUC_UNUSED,
                       MskMiracastBackend *self)
 {
   stop_stream (self);
@@ -97,7 +97,7 @@ on_peer_disconnected (MskDbusWifi *wifi, const char *peer_path,
 }
 
 static void
-on_stream_ready (MskRtspWfd *rtsp, MskMiracastBackend *self)
+on_stream_ready (MskRtspWfd *rtsp G_GNUC_UNUSED, MskMiracastBackend *self)
 {
   set_status (self, "Streaming");
 }
@@ -167,7 +167,7 @@ msk_miracast_backend_get_paintable (MskBackend *backend)
 }
 
 static const char *
-msk_miracast_backend_get_name (MskBackend *backend)
+msk_miracast_backend_get_name (MskBackend *backend G_GNUC_UNUSED)
 {
   return "Miracast";
 }
@@ -221,7 +221,7 @@ msk_miracast_backend_class_init (MskMiracastBackendClass *klass)
 }
 
 static void
-msk_miracast_backend_init (MskMiracastBackend *self)
+msk_miracast_backend_init (MskMiracastBackend *self G_GNUC_UNUSED)
 {
 }
 
