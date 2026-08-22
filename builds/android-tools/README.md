@@ -35,3 +35,28 @@ Requires `podman`.
 | `make_f2fs`, `sload_f2fs` | F2FS filesystem tools |
 
 Debian provides `adb`, `fastboot`, `simg2img`, `img2simg`, `append2simg` as dependencies.
+
+## Extra APK tools (not in our package)
+
+```bash
+sudo apt install unzip zip apksigner zipalign apktool
+# jadx: https://github.com/skylot/jadx/releases
+```
+
+## super.img workflow
+
+```bash
+simg2img super.img super.raw        # only if sparse
+lpdump super.raw                    # partition offsets
+lpunpack super.raw out/             # extracts system.img, vendor.img, ...
+sudo mount -o loop system.img /mnt/x
+```
+
+## APK workflow
+
+```bash
+adb pull /system/priv-app/X/X.apk
+adb install X.apk
+adb logcat -c && adb logcat -v threadtime
+apktool d X.apk → edit smali → apktool b → zipalign → apksigner sign
+```
