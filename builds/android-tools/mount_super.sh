@@ -19,12 +19,34 @@ set -euo pipefail
 
 MOUNT_BASE="${2:-/mnt/super_partitions}"
 STATE_FILE="/tmp/mount_super.state"
+MOUNT_SUCCESS=0
 
 require_root() {
     if [[ $EUID -ne 0 ]]; then
         echo "Run as root (sudo)." >&2
         exit 1
     fi
+}
+
+cleanup_on_error() {
+    local rc=$?
+    [[ $rc -eq 0 || $MOUNT_SUCCESS -eq 1 ]] && return
+    echo >&2
+    echo "Error (exit $rc) — cleaning up partial mounts..." >&2
+    if [[ -f "$STATE_FILE" ]]; then
+        while read -r name mp; do
+            mountpoint -q "$mp" 2>/dev/null && umount "$mp" 2>/dev/null || true
+            dmsetup info "$name" &>/dev/null && dmsetup remove "$name" 2>/dev/null || true
+        done < "$STATE_FILE"
+        local loop_dev
+        loop_dev=$(grep '^LOOP=' "$STATE_FILE" | head -1 | cut -d= -f2)
+        if [[ -n "$loop_dev" ]] && /usr/sbin/losetup "$loop_dev" &>/dev/null; then
+            /usr/sbin/losetup -d "$loop_dev" 2>/dev/null || true
+        fi
+        rm -f "$STATE_FILE"
+    fi
+    rm -rf "$WORKDIR"
+    echo "Cleaned up." >&2
 }
 
 cleanup_all() {
@@ -68,12 +90,14 @@ if [[ -z "$IMG" || ! -f "$IMG" ]]; then
 fi
 
 require_root
+trap cleanup_on_error EXIT
 for bin in lpdump dmsetup losetup mount; do
     command -v "$bin" >/dev/null || { echo "Missing required tool: $bin" >&2; exit 1; }
 done
 
 > "$STATE_FILE"
 mkdir -p "$MOUNT_BASE"
+WORKDIR=$(mktemp -d)
 
 RAW_IMG="$IMG"
 
@@ -122,7 +146,9 @@ echo "$LPDUMP_OUT" | awk '
         len = end - start + 1
         print name, len, target
     }
-' | while read -r NAME LEN TARGET_OFFSET; do
+' > "$WORKDIR/partitions"
+
+while read -r NAME LEN TARGET_OFFSET; do
     [[ -z "$NAME" ]] && continue
     echo "[4/5] Mapping $NAME (length=$LEN sectors, target_offset=$TARGET_OFFSET)"
     DM_NAME="super_${NAME}"
@@ -152,6 +178,8 @@ echo "$LPDUMP_OUT" | awk '
     fi
 done
 
+rm -rf "$WORKDIR"
+MOUNT_SUCCESS=1
 echo
 echo "All done. Partitions mounted under: $MOUNT_BASE"
 echo "To clean up later: sudo $0 --umount $MOUNT_BASE"
