@@ -127,6 +127,14 @@ echo "LOOP=$LOOP_DEV" >> "$STATE_FILE"
 echo "[3/5] Reading partition metadata..."
 LPDUMP_OUT=$(lpdump "$LOOP_DEV" 2>/dev/null || lpdump "$RAW_IMG")
 
+# Reject multi-device super (spans multiple block devices)
+NUM_DEVICES=$(echo "$LPDUMP_OUT" | grep -c 'Partition name:' || true)
+if [[ "$NUM_DEVICES" -gt 1 ]]; then
+    echo "Error: multi-device super detected ($NUM_DEVICES block devices)." >&2
+    echo "This script only supports single-device super images." >&2
+    exit 1
+fi
+
 # --- Step 4/5: parse each partition's extents and map + mount ---
 # lpdump text output looks like:
 #   Name: system_a
