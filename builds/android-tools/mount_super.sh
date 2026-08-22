@@ -75,34 +75,23 @@ done
 > "$STATE_FILE"
 mkdir -p "$MOUNT_BASE"
 
-WORKDIR=$(mktemp -d)
 RAW_IMG="$IMG"
 
 # --- Step 1: sparse -> raw if needed ---
-# Try simg2img first — it exits non-zero if the image is already raw,
-# so we catch the failure and fall back to the original file.
-# If simg2img is missing, use `file` to detect the sparse magic.
+# Detect sparse images and tell the user to convert beforehand.
+# Sparse images must be converted: simg2img super.img super.raw
 IS_SPARSE=0
-if command -v simg2img >/dev/null 2>&1; then
-    RAW_IMG="$WORKDIR/super.raw"
-    if simg2img "$IMG" "$RAW_IMG" 2>/dev/null; then
-        IS_SPARSE=1
-    else
-        RAW_IMG="$IMG"
-    fi
-elif command -v file >/dev/null 2>&1; then
+if command -v file >/dev/null 2>&1; then
     if file "$IMG" 2>/dev/null | grep -qi "sparse image"; then
-        echo "Warning: simg2img not found; cannot convert sparse image." >&2
-        echo "         Install android-sdk-libsparse-utils and re-run." >&2
-        exit 1
+        IS_SPARSE=1
     fi
 fi
 
 if [[ "$IS_SPARSE" -eq 1 ]]; then
-    echo "[1/5] Converted sparse image to raw."
-else
-    echo "[1/5] Image is raw, using as-is."
+    echo "Error: image is sparse. Convert it first: simg2img $IMG ${IMG%.img}.raw" >&2
+    exit 1
 fi
+echo "[1/5] Image is raw."
 
 # --- Step 2: attach loop device ---
 echo "[2/5] Attaching loop device..."
@@ -163,7 +152,6 @@ echo "$LPDUMP_OUT" | awk '
     fi
 done
 
-rm -rf "$WORKDIR"
 echo
 echo "All done. Partitions mounted under: $MOUNT_BASE"
 echo "To clean up later: sudo $0 --umount $MOUNT_BASE"
