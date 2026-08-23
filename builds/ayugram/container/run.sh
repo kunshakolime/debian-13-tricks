@@ -89,8 +89,19 @@ mkdir -p "$DEBPKG/usr/share/applications"
 mkdir -p "$DEBPKG/usr/share/icons/hicolor/256x256/apps"
 mkdir -p "$DEBPKG/usr/share/doc/ayugram"
 
-# Install binary
-install -m 0755 /build/out/stage/Telegram "$DEBPKG/usr/bin/ayugram"
+# Install binary (private dir + wrapper for bundled legacy libs)
+APPLIB="$DEBPKG/usr/lib/ayugram"
+mkdir -p "$APPLIB"
+install -s -m 0755 /build/out/stage/Telegram "$APPLIB/AyuGram.bin"
+if [ -d /build/out/stage/pcre ]; then
+  cp -a /build/out/stage/pcre/. "$APPLIB"/
+fi
+cat > "$DEBPKG/usr/bin/ayugram" << 'EOF'
+#!/bin/sh
+export LD_LIBRARY_PATH="/usr/lib/ayugram${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+exec /usr/lib/ayugram/AyuGram.bin "$@"
+EOF
+chmod 0755 "$DEBPKG/usr/bin/ayugram"
 
 # Install desktop file
 DESKTOP_FILE=$(find /build/out/stage -name "*.desktop" -print -quit 2>/dev/null || true)
@@ -102,22 +113,13 @@ fi
 
 # Compute shared-library dependencies
 log "Computing shared-library dependencies"
-cat > /tmp/control << 'CTL'
-Source: ayugram
-Section: net
-Priority: optional
-Maintainer: Debian 13 build <root@localhost>
-
-Package: ayugram
-Architecture: amd64
-Description: AyuGram - Telegram client with extra features
-CTL
-
-DEPS="$(cd /build/out && dpkg-shlibdeps -O \
-  debpkg/usr/bin/ayugram \
-  2>/dev/null || true)"
-DEPS="${DEPS#shlibs:Depends=}"
-DEPS="${DEPS// /}"
+if [ -z "${DEPS:-}" ]; then
+  DEPS="$(cd /build/out && dpkg-shlibdeps -O \
+    debpkg/usr/lib/ayugram/AyuGram.bin \
+    2>/dev/null || true)"
+  DEPS="${DEPS#shlibs:Depends=}"
+  DEPS="${DEPS// /}"
+fi
 echo "Computed Depends: $DEPS"
 
 cat > "$DEBPKG/DEBIAN/control" << EOF
