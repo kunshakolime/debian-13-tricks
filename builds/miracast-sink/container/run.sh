@@ -11,9 +11,20 @@
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 
+export CCACHE_DIR=/build/ccache
+mkdir -p "$CCACHE_DIR"
+export CC="ccache cc"
+export CXX="ccache c++"
+
 log() { printf '\n==> %s\n' "$*"; }
 
 # ---------------------------------------------------------------- MiracleCast
+if [ -d /build/out/build-miracle ] \
+   && ! grep -q "ccache" /build/out/build-miracle/build.ninja 2>/dev/null; then
+  log "meson: reconfiguring miraclecast (enable ccache)"
+  rm -rf /build/out/build-miracle /build/out/build-app
+fi
+
 if [ ! -d /build/out/build-miracle ]; then
   log "meson: configure miraclecast (prefix=/usr)"
   meson setup /build/out/build-miracle /build/miraclecast \
