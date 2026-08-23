@@ -64,8 +64,17 @@ cd "$SRC_DIR"
 log "Staging install"
 rm -rf /build/out/stage
 mkdir -p /build/out/stage
-cp -a out/Release/Telegram /build/out/stage/Telegram 2>/dev/null || \
-  cp -a out/Telegram /build/out/stage/Telegram 2>/dev/null || true
+
+BIN=""
+for f in out/Release/AyuGram out/Release/Telegram out/AyuGram; do
+  if [ -f "$f" ]; then BIN="$f"; break; fi
+done
+if [ -z "$BIN" ]; then
+  echo "ERROR: compiled binary not found under $SRC_DIR/out" >&2
+  exit 1
+fi
+log "Staging binary: $BIN"
+cp -a "$BIN" /build/out/stage/Telegram
 
 # Also grab any .desktop files, icons, etc.
 find "$SRC_DIR" -name "*.desktop" -exec cp {} /build/out/stage/ \; 2>/dev/null || true

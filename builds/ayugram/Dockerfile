@@ -7,7 +7,7 @@ FROM ghcr.io/telegramdesktop/tdesktop/centos_env:latest
 
 USER root
 
-RUN dnf install -y protobuf-devel ccache && dnf clean all \
+RUN dnf install -y epel-release protobuf-devel ccache dpkg dpkg-dev && dnf clean all \
  && cd /tmp \
  && curl -sLO https://github.com/protocolbuffers/protobuf/releases/download/v21.12/protobuf-cpp-3.21.12.tar.gz \
  && tar xf protobuf-cpp-3.21.12.tar.gz \
