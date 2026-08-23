@@ -10,7 +10,7 @@
 FROM docker.io/library/debian:13
 
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    build-essential meson ninja-build pkg-config git ca-certificates curl file \
+    build-essential meson ninja-build ccache pkg-config git ca-certificates curl file \
  && rm -rf /var/lib/apt/lists/*
 
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \

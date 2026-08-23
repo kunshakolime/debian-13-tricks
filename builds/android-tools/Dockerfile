@@ -11,7 +11,7 @@ RUN apt-get update
 
 # Layer 2: base build tools
 RUN DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-    build-essential cmake ninja-build pkg-config git ca-certificates curl file
+    build-essential cmake ninja-build ccache pkg-config git ca-certificates curl file
 
 # Layer 3: Go (required for adb/fastboot build — even though we don't package them)
 RUN DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \

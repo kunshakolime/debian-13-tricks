@@ -14,17 +14,26 @@ log() { printf '\n==> %s\n' "$*"; }
 VERSION="${VERSION:?VERSION must be set}"
 SRC_TARBALL="/build/source/android-tools-${VERSION}.tar.xz"
 
+export CCACHE_DIR=/build/ccache
+mkdir -p "$CCACHE_DIR"
+
 # --------------------------------------------------------------- build
 if [ ! -d /build/out/build ]; then
   log "Extracting source"
   mkdir -p /build/out/build
   tar -xf "$SRC_TARBALL" -C /build/out/build --strip-components=1 2>/dev/null || true
+fi
 
-  log "cmake: configure (Release, Ninja)"
+if [ ! -f /build/out/build/_build/CMakeCache.txt ] \
+   || ! grep -q "CMAKE_CXX_COMPILER_LAUNCHER" /build/out/build/_build/CMakeCache.txt; then
+  log "cmake: configure (Release, Ninja, ccache)"
+  rm -rf /build/out/build/_build
   cmake -S /build/out/build -B /build/out/build/_build \
     -DCMAKE_INSTALL_PREFIX=/usr \
     -DCMAKE_BUILD_TYPE=Release \
     -G Ninja \
+    -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+    -DCMAKE_CXX_COMPILER_LAUNCHER=ccache \
     -DANDROID_TOOLS_USE_BUNDLED_FMT=OFF \
     -DANDROID_TOOLS_USE_BUNDLED_LIBUSB=OFF
 else
