@@ -16,7 +16,7 @@ cleanup() {
   pkill -f "mock-wifid.py" 2>/dev/null
   pkill -f "xvfb-run" 2>/dev/null
   sleep 1
-  sudo systemctl start miracast-wifid.service 2>/dev/null
+  sudo systemctl start msk-wifid.service 2>/dev/null
 }
 trap cleanup EXIT
 
@@ -72,7 +72,7 @@ wait_for() {
 }
 
 # ── Stop real daemon ────────────────────────────────────────────
-sudo systemctl stop miracast-wifid.service
+sudo systemctl stop msk-wifid.service
 sleep 1
 
 # ── Test 1: Happy path ─────────────────────────────────────────

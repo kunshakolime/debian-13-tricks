@@ -101,11 +101,8 @@ echo "Computed Depends: $DEPS"
 cat > /build/out/debpkg/DEBIAN/postinst <<'PI'
 #!/bin/sh
 set -e
-# Enable the MiracleCast wifi daemon so the app can drive the sink.
 if [ -x /usr/bin/systemctl ]; then
   systemctl daemon-reload >/dev/null 2>&1 || true
-  systemctl enable miracast-wifid.service >/dev/null 2>&1 || true
-  systemctl start  miracast-wifid.service >/dev/null 2>&1 || true
 fi
 if [ -x /usr/bin/update-desktop-database ]; then
   update-desktop-database /usr/share/applications >/dev/null 2>&1 || true
@@ -118,8 +115,8 @@ cat > /build/out/debpkg/DEBIAN/prerm <<'PRERM'
 #!/bin/sh
 set -e
 if [ "$1" = "remove" ] && [ -x /usr/bin/systemctl ]; then
-  systemctl stop miracast-wifid.service >/dev/null 2>&1 || true
-  systemctl disable miracast-wifid.service >/dev/null 2>&1 || true
+  systemctl stop msk-wifid.service >/dev/null 2>&1 || true
+  systemctl disable msk-wifid.service >/dev/null 2>&1 || true
 fi
 exit 0
 PRERM

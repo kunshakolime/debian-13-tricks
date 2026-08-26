@@ -4,7 +4,7 @@ GTK4 app that turns the machine into a Miracast or Chromecast receiver.
 
 ## Status
 
-v0.2.0. Both backends compile and package. Miracast is tested end-to-end.
+v0.3.0. Both backends run simultaneously. Miracast is tested end-to-end.
 Chromecast has discovery, TLS, protobuf, and media commands but needs a real
 device test.
 
@@ -26,7 +26,7 @@ miracast-sink  (GTK4/Adwaita, C)
 │       └── cast_channel.proto  CastChannel message definition
 ├── stream.c      GStreamer pipeline → GtkPicture
 ├── window.c      Adwaita window
-└── main.c        --chromecast flag, backend lifecycle
+└── main.c        both backends run, first to connect wins
 ```
 
 ## Layout
@@ -51,17 +51,17 @@ miracast-sink  (GTK4/Adwaita, C)
 ## Install
 
 ```bash
-sudo apt install ./miracast-sink_0.2.0_amd64.deb
+sudo apt install ./miracast-sink_0.3.0_amd64.deb
 ```
-
-Starts `miracast-wifid` automatically. Stops on uninstall.
 
 ## Usage
 
 ```bash
-miracast-sink              # Miracast (default)
-miracast-sink --chromecast # Chromecast
+miracast-sink
 ```
+
+Both Miracast and Chromecast backends start automatically.
+The first device to connect becomes the active stream.
 
 ## What's next
 
