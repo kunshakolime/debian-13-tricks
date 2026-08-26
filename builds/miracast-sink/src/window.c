@@ -8,6 +8,7 @@ struct _MskWindow
   GtkStack *stack;
   GtkLabel *status_label;
   GtkLabel *device_label;
+  GtkLabel *backend_label;
   GtkButton *disconnect_button;
   GtkPicture *video_picture;
 };
@@ -84,6 +85,10 @@ msk_window_init (MskWindow *self)
   self->device_label = GTK_LABEL (gtk_label_new (""));
   gtk_label_set_wrap (self->device_label, TRUE);
 
+  self->backend_label = GTK_LABEL (gtk_label_new (""));
+  gtk_label_set_wrap (self->backend_label, TRUE);
+  gtk_widget_add_css_class (GTK_WIDGET (self->backend_label), "dim-label");
+
   self->video_picture = GTK_PICTURE (gtk_picture_new ());
   gtk_picture_set_can_shrink (self->video_picture, TRUE);
   gtk_widget_set_vexpand (GTK_WIDGET (self->video_picture), TRUE);
@@ -108,6 +113,7 @@ msk_window_init (MskWindow *self)
 
   gtk_box_append (box, GTK_WIDGET (self->status_label));
   gtk_box_append (box, GTK_WIDGET (self->device_label));
+  gtk_box_append (box, GTK_WIDGET (self->backend_label));
   gtk_box_append (box, viewport);
 
   adw_toolbar_view_set_content (toolbar, GTK_WIDGET (box));
@@ -161,6 +167,12 @@ void
 msk_window_set_device (MskWindow *self, const char *device)
 {
   gtk_label_set_text (self->device_label, device);
+}
+
+void
+msk_window_set_backend (MskWindow *self, const char *backend)
+{
+  gtk_label_set_text (self->backend_label, backend);
 }
 
 void

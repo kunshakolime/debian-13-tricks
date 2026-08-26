@@ -15,14 +15,14 @@ APP_PID=""
 cleanup() {
   [ -n "$MOCK_PID" ] && kill "$MOCK_PID" 2>/dev/null
   [ -n "$APP_PID" ] && kill "$APP_PID" 2>/dev/null
-  sudo systemctl start miracast-wifid.service 2>/dev/null
+  sudo systemctl start msk-wifid.service 2>/dev/null
 }
 trap cleanup EXIT
 
 mkdir -p "$WORK"
 
 echo "[1/4] Stopping real miracle-wifid..."
-sudo systemctl stop miracast-wifid.service
+sudo systemctl stop msk-wifid.service
 sleep 1
 
 echo "[2/4] Starting mock source..."

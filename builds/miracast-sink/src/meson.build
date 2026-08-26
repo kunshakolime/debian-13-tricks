@@ -1,5 +1,5 @@
 project('miracast-sink', 'c',
-  version: '0.1.0',
+  version: '0.3.0',
   license: 'LGPL-2.1+',
   meson_version: '>= 1.0',
   default_options: ['c_std=c11', 'warning_level=2', 'buildtype=release'])
@@ -48,6 +48,7 @@ if avahi_client_dep.found() and avahi_glib_dep.found() and protobuf_c_dep.found(
     protobuf_c_dep,
     json_glib_dep,
   ]
+  add_project_arguments('-DHAVE_CHROMECAST', language: 'c')
   message('Chromecast backend: enabled')
 else
   message('Chromecast backend: disabled (missing dependencies)')
@@ -87,5 +88,5 @@ install_data(
   install_dir: get_option('sysconfdir') / 'dbus-1' / 'system.d')
 
 install_data(
-  'data' / 'miracast-wifid.service',
+  'data' / 'msk-wifid.service',
   install_dir: get_option('libdir') / 'systemd' / 'system')
