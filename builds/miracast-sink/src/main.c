@@ -68,6 +68,10 @@ on_disconnected (MskBackend *backend, App *app)
 static void
 on_status_changed (MskBackend *backend, const char *status, App *app)
 {
+  const char *name = msk_backend_get_name (backend);
+
+  msk_window_set_backend_status (app->window, name, status);
+
   if (app->active_backend)
     {
       if (app->active_backend == backend)
@@ -95,12 +99,6 @@ on_disconnect_requested (MskWindow *window G_GNUC_UNUSED, App *app)
   msk_window_set_device (app->window, "");
   msk_window_set_backend (app->window, "");
   set_status (app, "Ready");
-
-  for (i = 0; i < app->backends->len; i++)
-    {
-      MskBackend *b = g_ptr_array_index (app->backends, i);
-      msk_backend_start (b);
-    }
 }
 
 static void
@@ -115,6 +113,18 @@ connect_backend (App *app, MskBackend *backend)
 }
 
 static void
+on_window_destroy (GtkWindow *window G_GNUC_UNUSED, App *app)
+{
+  guint i;
+
+  for (i = 0; i < app->backends->len; i++)
+    msk_backend_stop (g_ptr_array_index (app->backends, i));
+
+  g_ptr_array_unref (app->backends);
+  g_free (app);
+}
+
+static void
 activate (GtkApplication *gtk_app G_GNUC_UNUSED, gpointer user_data G_GNUC_UNUSED)
 {
   App *app = g_new0 (App, 1);
@@ -126,16 +136,20 @@ activate (GtkApplication *gtk_app G_GNUC_UNUSED, gpointer user_data G_GNUC_UNUSE
   g_ptr_array_add (app->backends, miracast);
   connect_backend (app, miracast);
   msk_backend_start (miracast);
+  msk_window_set_backend_status (app->window, "Miracast", "Starting…");
 
 #ifdef HAVE_CHROMECAST
   MskBackend *chromecast = msk_chromecast_backend_new ();
   g_ptr_array_add (app->backends, chromecast);
   connect_backend (app, chromecast);
   msk_backend_start (chromecast);
+  msk_window_set_backend_status (app->window, "Chromecast", "Starting…");
 #endif
 
   g_signal_connect (app->window, "disconnect-requested",
                     G_CALLBACK (on_disconnect_requested), app);
+  g_signal_connect (app->window, "destroy",
+                    G_CALLBACK (on_window_destroy), app);
 
   gtk_window_present (GTK_WINDOW (app->window));
 }

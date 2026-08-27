@@ -11,6 +11,13 @@ struct _MskWindow
   GtkLabel *backend_label;
   GtkButton *disconnect_button;
   GtkPicture *video_picture;
+
+  GtkBox *backend_box;
+  GtkLabel *miracast_status;
+  GtkLabel *chromecast_status;
+
+  guint status_timeout;
+  char *pending_status;
 };
 
 G_DEFINE_TYPE (MskWindow, msk_window, ADW_TYPE_APPLICATION_WINDOW)
@@ -50,6 +57,21 @@ msk_window_set_property (GObject      *object,
     }
 }
 
+static gboolean
+on_status_timeout (gpointer user_data)
+{
+  MskWindow *self = MSK_WINDOW (user_data);
+
+  if (self->pending_status)
+    {
+      gtk_label_set_text (self->status_label, self->pending_status);
+      g_clear_pointer (&self->pending_status, g_free);
+    }
+
+  self->status_timeout = 0;
+  return G_SOURCE_REMOVE;
+}
+
 static void
 msk_window_init (MskWindow *self)
 {
@@ -59,6 +81,8 @@ msk_window_init (MskWindow *self)
   GtkWidget *content;
   GtkWidget *viewport;
   GtkWidget *spinner;
+  GtkBox *status_box;
+  GtkLabel *label;
 
   toolbar = ADW_TOOLBAR_VIEW (adw_toolbar_view_new ());
   header = ADW_HEADER_BAR (adw_header_bar_new ());
@@ -89,6 +113,25 @@ msk_window_init (MskWindow *self)
   gtk_label_set_wrap (self->backend_label, TRUE);
   gtk_widget_add_css_class (GTK_WIDGET (self->backend_label), "dim-label");
 
+  self->backend_box = GTK_BOX (gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 16));
+  gtk_widget_set_halign (GTK_WIDGET (self->backend_box), GTK_ALIGN_CENTER);
+
+  status_box = GTK_BOX (gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 4));
+  label = gtk_label_new ("Miracast:");
+  gtk_widget_add_css_class (label, "dim-label");
+  gtk_box_append (status_box, label);
+  self->miracast_status = GTK_LABEL (gtk_label_new ("Starting…"));
+  gtk_box_append (status_box, GTK_WIDGET (self->miracast_status));
+  gtk_box_append (self->backend_box, GTK_WIDGET (status_box));
+
+  status_box = GTK_BOX (gtk_box_new (GTK_ORIENTATION_HORIZONTAL, 4));
+  label = gtk_label_new ("Chromecast:");
+  gtk_widget_add_css_class (label, "dim-label");
+  gtk_box_append (status_box, label);
+  self->chromecast_status = GTK_LABEL (gtk_label_new ("Starting…"));
+  gtk_box_append (status_box, GTK_WIDGET (self->chromecast_status));
+  gtk_box_append (self->backend_box, GTK_WIDGET (status_box));
+
   self->video_picture = GTK_PICTURE (gtk_picture_new ());
   gtk_picture_set_can_shrink (self->video_picture, TRUE);
   gtk_widget_set_vexpand (GTK_WIDGET (self->video_picture), TRUE);
@@ -114,6 +157,7 @@ msk_window_init (MskWindow *self)
   gtk_box_append (box, GTK_WIDGET (self->status_label));
   gtk_box_append (box, GTK_WIDGET (self->device_label));
   gtk_box_append (box, GTK_WIDGET (self->backend_label));
+  gtk_box_append (box, GTK_WIDGET (self->backend_box));
   gtk_box_append (box, viewport);
 
   adw_toolbar_view_set_content (toolbar, GTK_WIDGET (box));
@@ -160,6 +204,13 @@ msk_window_new (GtkApplication *app)
 void
 msk_window_set_status (MskWindow *self, const char *status)
 {
+  if (self->status_timeout)
+    {
+      g_source_remove (self->status_timeout);
+      self->status_timeout = 0;
+    }
+
+  g_clear_pointer (&self->pending_status, g_free);
   gtk_label_set_text (self->status_label, status);
 }
 
@@ -173,6 +224,20 @@ void
 msk_window_set_backend (MskWindow *self, const char *backend)
 {
   gtk_label_set_text (self->backend_label, backend);
+}
+
+void
+msk_window_set_backend_status (MskWindow *self, const char *name, const char *status)
+{
+  GtkLabel *label = NULL;
+
+  if (g_strcmp0 (name, "Miracast") == 0)
+    label = self->miracast_status;
+  else if (g_strcmp0 (name, "Chromecast") == 0)
+    label = self->chromecast_status;
+
+  if (label)
+    gtk_label_set_text (label, status);
 }
 
 void

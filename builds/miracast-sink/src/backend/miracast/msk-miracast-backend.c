@@ -26,6 +26,8 @@ enum
 
 static guint signals[N_SIGNALS];
 
+MSK_BACKEND_SIGNAL_DEFS (signals, MSK_TYPE_MIRACAST_BACKEND)
+
 static void msk_miracast_backend_interface_init (MskBackendInterface *iface);
 
 G_DEFINE_TYPE_WITH_CODE (MskMiracastBackend, msk_miracast_backend, G_TYPE_OBJECT,
@@ -33,17 +35,11 @@ G_DEFINE_TYPE_WITH_CODE (MskMiracastBackend, msk_miracast_backend, G_TYPE_OBJECT
                                                 msk_miracast_backend_interface_init))
 
 static void
-set_status (MskMiracastBackend *self, const char *status)
-{
-  g_signal_emit (self, signals[SIGNAL_STATUS_CHANGED], 0, status);
-}
-
-static void
 start_stream (MskMiracastBackend *self, const char *peer_address)
 {
   msk_stream_start (self->stream);
   msk_rtsp_wfd_connect_peer (self->rtsp, peer_address);
-  set_status (self, "Streaming");
+  msk_emit_status (self, "Streaming");
 }
 
 static void
@@ -51,7 +47,7 @@ stop_stream (MskMiracastBackend *self)
 {
   msk_stream_stop (self->stream);
   msk_rtsp_wfd_stop (self->rtsp);
-  set_status (self, "Ready");
+  msk_emit_status (self, "Ready");
 }
 
 static void
@@ -59,7 +55,7 @@ on_link_added (MskDbusWifi *wifi, const char *path, const char *name,
                MskMiracastBackend *self)
 {
   g_debug ("link added: %s (%s)", path, name);
-  set_status (self, "Listening for devices…");
+  msk_emit_status (self, "Listening for devices…");
   msk_dbus_wifi_start (wifi);
 }
 
@@ -81,8 +77,8 @@ on_peer_connected (MskDbusWifi *wifi G_GNUC_UNUSED, const char *peer_path,
   self->peer_path = g_strdup (peer_path);
 
   status = g_strdup_printf ("Device connected (%s)", remote_address);
-  g_signal_emit (self, signals[SIGNAL_CONNECTED], 0, remote_address);
-  set_status (self, status);
+  msk_emit_connected (self, remote_address);
+  msk_emit_status (self, status);
   g_free (status);
 
   start_stream (self, remote_address);
@@ -93,13 +89,13 @@ on_peer_disconnected (MskDbusWifi *wifi G_GNUC_UNUSED, const char *peer_path G_G
                       MskMiracastBackend *self)
 {
   stop_stream (self);
-  g_signal_emit (self, signals[SIGNAL_DISCONNECTED], 0);
+  msk_emit_disconnected (self);
 }
 
 static void
 on_stream_ready (MskRtspWfd *rtsp G_GNUC_UNUSED, MskMiracastBackend *self)
 {
-  set_status (self, "Streaming");
+  msk_emit_status (self, "Streaming");
 }
 
 static void
@@ -136,7 +132,7 @@ msk_miracast_backend_start (MskBackend *backend)
   g_signal_connect (self->rtsp, MSK_RTSP_WFD_SIGNAL_STREAM_READY,
                     G_CALLBACK (on_stream_ready), self);
 
-  set_status (self, "Ready");
+  msk_emit_status (self, "Ready");
 }
 
 static void
@@ -201,23 +197,7 @@ msk_miracast_backend_class_init (MskMiracastBackendClass *klass)
 
   object_class->finalize = msk_miracast_backend_finalize;
 
-  signals[SIGNAL_CONNECTED] =
-    g_signal_new ("connected",
-                  MSK_TYPE_MIRACAST_BACKEND, G_SIGNAL_RUN_FIRST,
-                  0, NULL, NULL, NULL,
-                  G_TYPE_NONE, 1, G_TYPE_STRING);
-
-  signals[SIGNAL_DISCONNECTED] =
-    g_signal_new ("disconnected",
-                  MSK_TYPE_MIRACAST_BACKEND, G_SIGNAL_RUN_FIRST,
-                  0, NULL, NULL, NULL,
-                  G_TYPE_NONE, 0);
-
-  signals[SIGNAL_STATUS_CHANGED] =
-    g_signal_new ("status-changed",
-                  MSK_TYPE_MIRACAST_BACKEND, G_SIGNAL_RUN_FIRST,
-                  0, NULL, NULL, NULL,
-                  G_TYPE_NONE, 1, G_TYPE_STRING);
+  msk_register_signals ();
 }
 
 static void
