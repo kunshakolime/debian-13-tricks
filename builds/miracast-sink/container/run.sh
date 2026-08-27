@@ -76,6 +76,17 @@ if [ -d /build/out/debpkg/usr/lib/x86_64-linux-gnu/systemd ]; then
   rm -rf /build/out/debpkg/usr/lib/x86_64-linux-gnu/systemd
 fi
 
+# Create msk- wrapper scripts for MiracleCast binaries
+log "dpkg: creating msk- wrapper scripts"
+for bin in miracle-wifid miracle-sinkctl miracle-wifictl miracle-uibcctl; do
+  msk_bin="msk-${bin#miracle-}"
+  cat > "/build/out/debpkg/usr/bin/${msk_bin}" <<WRAPPER
+#!/bin/sh
+exec /usr/bin/${bin} "\$@"
+WRAPPER
+  chmod 755 "/build/out/debpkg/usr/bin/${msk_bin}"
+done
+
 cat > /build/out/debian/control <<'CTL'
 Source: miracast-sink
 Section: net
@@ -89,10 +100,10 @@ Description: GTK4 Miracast sink for Linux
 CTL
 
 DEPS="$(cd /build/out && dpkg-shlibdeps -O \
-  debpkg/usr/bin/miracle-wifid \
-  debpkg/usr/bin/miracle-sinkctl \
-  debpkg/usr/bin/miracle-wifictl \
-  debpkg/usr/bin/miracle-uibcctl \
+  debpkg/usr/bin/msk-wifid \
+  debpkg/usr/bin/msk-sinkctl \
+  debpkg/usr/bin/msk-wifictl \
+  debpkg/usr/bin/msk-uibcctl \
   debpkg/usr/bin/miracast-sink 2>/dev/null)"
 DEPS="${DEPS#shlibs:Depends=}"
 [ -n "$DEPS" ] || { echo "error: dpkg-shlibdeps returned nothing" >&2; exit 1; }
@@ -144,7 +155,7 @@ Description: GTK4 Miracast sink for Linux
   Turns the machine into a Miracast receiver. Other devices can mirror
   their screen to this computer over Wi-Fi Direct.
   .
-  Backend: MiracleCast (miracle-wifid + miracle-sinkctl). Frontend: GTK4
+  Backend: MiracleCast (msk-wifid + msk-sinkctl). Frontend: GTK4
   (miracast-sink).
 EOF
 
@@ -155,7 +166,7 @@ dpkg-deb --build --root-owner-group debpkg "miracast-sink_${VERSION}_amd64.deb"
 cp -f "miracast-sink_${VERSION}_amd64.deb" /build/out/debs/
 
 log "verifying shared library resolution"
-ldd /build/out/debpkg/usr/bin/miracle-* | grep -q "not found" \
+ldd /build/out/debpkg/usr/bin/miracle-* /build/out/debpkg/usr/bin/msk-* | grep -q "not found" \
   && { echo "error: unresolved libs" >&2; exit 1; } || echo "all libs resolved"
 dpkg-deb --info /build/out/debs/"miracast-sink_${VERSION}_amd64.deb" >/dev/null
 echo "DONE: /build/out/debs/miracast-sink_${VERSION}_amd64.deb"

@@ -24,17 +24,13 @@ enum
 
 static guint signals[N_SIGNALS];
 
+MSK_BACKEND_SIGNAL_DEFS (signals, MSK_TYPE_CHROMECAST_BACKEND)
+
 static void msk_chromecast_backend_interface_init (MskBackendInterface *iface);
 
 G_DEFINE_TYPE_WITH_CODE (MskChromecastBackend, msk_chromecast_backend, G_TYPE_OBJECT,
                          G_IMPLEMENT_INTERFACE (MSK_TYPE_BACKEND,
                                                 msk_chromecast_backend_interface_init))
-
-static void
-set_status (MskChromecastBackend *self, const char *status)
-{
-  g_signal_emit (self, signals[SIGNAL_STATUS_CHANGED], 0, status);
-}
 
 static void
 on_device_found (MskChromecastDiscovery *discovery G_GNUC_UNUSED,
@@ -50,7 +46,7 @@ on_device_found (MskChromecastDiscovery *discovery G_GNUC_UNUSED,
       self->current_device = device;
 
       status = g_strdup_printf ("Connecting to %s...", device->name);
-      set_status (self, status);
+      msk_emit_status (self, status);
       g_free (status);
 
       msk_chromecast_client_connect (self->client, device->host, device->port, NULL);
@@ -65,7 +61,7 @@ on_device_removed (MskChromecastDiscovery *discovery G_GNUC_UNUSED,
   if (self->current_device == device)
     {
       self->current_device = NULL;
-      set_status (self, "Device disconnected");
+      msk_emit_status (self, "Device disconnected");
     }
 }
 
@@ -80,16 +76,16 @@ on_client_connected (MskChromecastClient *client, MskChromecastBackend *self)
   msk_chromecast_client_send_get_status (client, NULL);
 
   status = g_strdup_printf ("Connected to %s", self->current_device->name);
-  g_signal_emit (self, signals[SIGNAL_CONNECTED], 0, self->current_device->name);
-  set_status (self, status);
+  msk_emit_connected (self, self->current_device->name);
+  msk_emit_status (self, status);
   g_free (status);
 }
 
 static void
 on_client_disconnected (MskChromecastClient *client G_GNUC_UNUSED, MskChromecastBackend *self)
 {
-  g_signal_emit (self, signals[SIGNAL_DISCONNECTED], 0);
-  set_status (self, "Disconnected");
+  msk_emit_disconnected (self);
+  msk_emit_status (self, "Disconnected");
 }
 
 static void
@@ -130,7 +126,7 @@ msk_chromecast_backend_start (MskBackend *backend)
   g_signal_connect (self->client, "message",
                     G_CALLBACK (on_client_message), self);
 
-  set_status (self, "Searching for Chromecast devices...");
+  msk_emit_status (self, "Searching for Chromecast devices...");
   msk_chromecast_discovery_start (self->discovery);
 }
 
@@ -186,23 +182,7 @@ msk_chromecast_backend_class_init (MskChromecastBackendClass *klass)
 
   object_class->finalize = msk_chromecast_backend_finalize;
 
-  signals[SIGNAL_CONNECTED] =
-    g_signal_new ("connected",
-                  MSK_TYPE_CHROMECAST_BACKEND, G_SIGNAL_RUN_FIRST,
-                  0, NULL, NULL, NULL,
-                  G_TYPE_NONE, 1, G_TYPE_STRING);
-
-  signals[SIGNAL_DISCONNECTED] =
-    g_signal_new ("disconnected",
-                  MSK_TYPE_CHROMECAST_BACKEND, G_SIGNAL_RUN_FIRST,
-                  0, NULL, NULL, NULL,
-                  G_TYPE_NONE, 0);
-
-  signals[SIGNAL_STATUS_CHANGED] =
-    g_signal_new ("status-changed",
-                  MSK_TYPE_CHROMECAST_BACKEND, G_SIGNAL_RUN_FIRST,
-                  0, NULL, NULL, NULL,
-                  G_TYPE_NONE, 1, G_TYPE_STRING);
+  msk_register_signals ();
 }
 
 static void

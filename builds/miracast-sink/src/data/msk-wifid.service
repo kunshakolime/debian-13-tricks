@@ -1,11 +1,11 @@
 [Unit]
-Description=MiracleCast Wi-Fi Display daemon
+Description=MSK Wi-Fi Display daemon
 After=dbus.service network.target
 Wants=dbus.service
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/miracle-wifid
+ExecStart=/usr/bin/msk-wifid
 Restart=on-failure
 RestartSec=2
 
