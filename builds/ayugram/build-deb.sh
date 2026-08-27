@@ -65,14 +65,14 @@ echo "Depends: ${DEPS:-<none computed>}"
 log "Building .deb inside container"
 set +e
 podman exec -e VERSION="$VERSION" -e DEPS="$DEPS" \
-  "$CTR" bash /container/run.sh
+  "$CTR" bash /build-inside.sh
 rc=$?
 set -e
 if [ "$rc" -ne 0 ]; then
   # Client died early (e.g. Ctrl+C): podman does not forward signals,
   # so stop the in-container build explicitly.
   podman exec "$CTR" bash -c \
-    'pkill -INT -f "/container/run.sh"; pkill -INT ninja; true' 2>/dev/null || true
+    'pkill -INT -f "/build-inside.sh"; pkill -INT ninja; true' 2>/dev/null || true
 fi
 
 [ "$rc" -eq 0 ] || exit "$rc"

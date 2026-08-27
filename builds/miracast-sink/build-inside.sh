@@ -2,7 +2,7 @@
 # run.sh — in-container build for the GTK4 Miracast sink.
 #
 # Runs inside the persistent podman container. /build is the host cache dir,
-# /container is this repo's container/ dir. Steps are incremental; nothing
+# /build-inside.sh is this script. Steps are incremental; nothing
 # is redone unless its output is missing.
 #
 # Stage 1: MiracleCast backend (miracle-wifid, miracle-sinkctl, ...)

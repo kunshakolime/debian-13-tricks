@@ -35,7 +35,7 @@ as a Debian .deb.
 
 The build uses test API credentials by default. To use your own:
 
-Edit `container/run.sh` and replace the `-DTDESKTOP_API_ID` and
+Edit `build-inside.sh` and replace the `-DTDESKTOP_API_ID` and
 `-DTDESKTOP_API_HASH` values. You can obtain credentials at
 https://my.telegram.org.
 
