@@ -15,9 +15,6 @@ struct _MskWindow
   GtkBox *backend_box;
   GtkLabel *miracast_status;
   GtkLabel *chromecast_status;
-
-  guint status_timeout;
-  char *pending_status;
 };
 
 G_DEFINE_TYPE (MskWindow, msk_window, ADW_TYPE_APPLICATION_WINDOW)
@@ -57,21 +54,6 @@ msk_window_set_property (GObject      *object,
     }
 }
 
-static gboolean
-on_status_timeout (gpointer user_data)
-{
-  MskWindow *self = MSK_WINDOW (user_data);
-
-  if (self->pending_status)
-    {
-      gtk_label_set_text (self->status_label, self->pending_status);
-      g_clear_pointer (&self->pending_status, g_free);
-    }
-
-  self->status_timeout = 0;
-  return G_SOURCE_REMOVE;
-}
-
 static void
 msk_window_init (MskWindow *self)
 {
@@ -82,7 +64,7 @@ msk_window_init (MskWindow *self)
   GtkWidget *viewport;
   GtkWidget *spinner;
   GtkBox *status_box;
-  GtkLabel *label;
+  GtkWidget *label;
 
   toolbar = ADW_TOOLBAR_VIEW (adw_toolbar_view_new ());
   header = ADW_HEADER_BAR (adw_header_bar_new ());
@@ -204,13 +186,6 @@ msk_window_new (GtkApplication *app)
 void
 msk_window_set_status (MskWindow *self, const char *status)
 {
-  if (self->status_timeout)
-    {
-      g_source_remove (self->status_timeout);
-      self->status_timeout = 0;
-    }
-
-  g_clear_pointer (&self->pending_status, g_free);
   gtk_label_set_text (self->status_label, status);
 }
 

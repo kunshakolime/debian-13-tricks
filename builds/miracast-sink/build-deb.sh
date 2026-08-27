@@ -9,7 +9,7 @@
 
 set -euo pipefail
 
-VERSION="0.2.0"
+VERSION="0.3.0"
 IMAGE="miracast-deb13:latest"
 CTR="miracast-deb13-builder"
 CACHE="${MIRACAST_BUILD_CACHE:-/var/tmp/miracast-deb13-build}"

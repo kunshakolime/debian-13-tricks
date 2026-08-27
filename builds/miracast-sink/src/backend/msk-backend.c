@@ -3,7 +3,7 @@
 G_DEFINE_INTERFACE (MskBackend, msk_backend, G_TYPE_OBJECT)
 
 static void
-msk_backend_default_init (MskBackendInterface *iface)
+msk_backend_default_init (MskBackendInterface *iface G_GNUC_UNUSED)
 {
 }
 
