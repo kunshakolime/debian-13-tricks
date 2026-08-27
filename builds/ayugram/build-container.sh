@@ -44,7 +44,7 @@ else
   log "Creating persistent container '$CTR'"
   podman run -d --name "$CTR" --network=host --user root \
     -v "$CACHE":/build:Z \
-    -v "$SCRIPT_DIR/container":/container:Z \
+    -v "$SCRIPT_DIR/build-inside.sh":/build-inside.sh:Z \
     "$IMAGE" sleep infinity
 fi
 

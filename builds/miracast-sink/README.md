@@ -37,7 +37,7 @@ miracast-sink  (GTK4/Adwaita, C)
 | `Dockerfile` | Build environment |
 | `build-miracast-deb.sh` | Orchestrator (--reimage, --recompile) |
 | `build-container.sh` | Container lifecycle (--refresh) |
-| `container/run.sh` | In-container build + dpkg assembly |
+| `build-inside.sh` | In-container build + dpkg assembly |
 | `test/` | Integration tests (need miracle-wifid) |
 
 ## Build

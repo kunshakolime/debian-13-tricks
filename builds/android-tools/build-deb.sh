@@ -37,7 +37,7 @@ fi
 
 log "Building .deb inside container"
 podman exec -e VERSION="$VERSION" \
-  "$CTR" bash /container/run.sh
+  "$CTR" bash /build-inside.sh
 
 mkdir -p "$OUTDIR"
 install -m 0644 "$CACHE/out/debs/android-tools_${VERSION}_amd64.deb" "$OUTDIR/"
