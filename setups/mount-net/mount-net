@@ -93,7 +93,19 @@ try_mount() {
     echo "  running: mount $what $where -t $fstype -o $opts"
     sudo timeout 20 mount "$what" "$where" -t "$fstype" -o "$opts" < /dev/null 2>&1 || rc=$?
     if [ "$rc" = "124" ]; then
-        echo "  (timed out after 20s — server not reachable)"
+        echo "  (timed out after 20s — server not reachable or SSH authorization failed)"
+        if [ "$fstype" = "fuse.sshfs" ]; then
+            echo "  For sftp/sshfs mounts, this often means the SSH key is not authorized."
+            echo "  If no key exists, mount-net will generate one. Then run:"
+            echo "    ssh-copy-id ${what%%:*}"
+            echo "  And make it available to systemd (runs as root):"
+            echo "    sudo mkdir -p /root/.ssh && sudo cp ~/.ssh/id_ed25519* ~/.ssh/known_hosts /root/.ssh/ 2>/dev/null; sudo chmod 600 /root/.ssh/id_ed25519"
+        fi
+    elif [ "$rc" != "0" ] && [ "$fstype" = "fuse.sshfs" ]; then
+        echo "  (mount failed — for sftp/sshfs this often means the SSH key is not authorized)"
+        echo "  Try:"
+        echo "    ssh-copy-id ${what%%:*}"
+        echo "    sudo mkdir -p /root/.ssh && sudo cp ~/.ssh/id_ed25519* ~/.ssh/known_hosts /root/.ssh/ 2>/dev/null; sudo chmod 600 /root/.ssh/id_ed25519"
     fi
     return "$rc"
 }
@@ -295,7 +307,21 @@ EOF
             what="$suser:$rpath"
             fstype="fuse.sshfs"
             opts="uid=$(id -u),gid=$(id -g),allow_other,_netdev"
-            echo "Note: set up key login once with:  ssh-copy-id $suser"
+            # Auto-generate SSH key if none exists and auto-copy for systemd (runs as root)
+            if ! ls "$HOME/.ssh/id_ed25519" "$HOME/.ssh/id_rsa" "$HOME/.ssh/id_ecdsa" "$HOME/.ssh/id_ed25519_sk" "$HOME/.ssh/id_ecdsa_sk" 1>/dev/null 2>&1; then
+                echo "No SSH key found, generating one..."
+                mkdir -p "$HOME/.ssh"
+                chmod 700 "$HOME/.ssh"
+                ssh-keygen -t ed25519 -N "" -f "$HOME/.ssh/id_ed25519" >/dev/null 2>&1
+            fi
+            # ensure systemd (root) can use the key
+            if [ -f "$HOME/.ssh/id_ed25519" ] || [ -f "$HOME/.ssh/id_rsa" ] || [ -f "$HOME/.ssh/id_ecdsa" ]; then
+                sudo mkdir -p /root/.ssh 2>/dev/null || true
+                sudo cp "$HOME/.ssh/id_ed25519"* "$HOME/.ssh/known_hosts" /root/.ssh/ 2>/dev/null || true
+                sudo chmod 700 /root/.ssh 2>/dev/null || true
+                sudo chmod 600 /root/.ssh/id_ed25519 2>/dev/null || sudo chmod 600 /root/.ssh/id_rsa 2>/dev/null || true
+            fi
+            echo "Run: ssh-copy-id $suser  (then mount will work)" 
             ;;
         ftp)
             local fhost fpath fscheme
