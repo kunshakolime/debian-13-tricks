@@ -6,7 +6,7 @@ wirelessly with Android Quick Share devices.
 ## Install
 
 ```bash
-sudo apt install ./packet_0.6.1_amd64.deb
+sudo apt install https://github.com/kunshakolime/debian-13-tricks/releases/download/packet-0.6.1/packet_0.6.1_amd64.deb
 ```
 
 ## Rebuild
