@@ -14,12 +14,27 @@ sudo tar -C /opt/nvim --strip-components=1 -xzf /tmp/nvim.tar.gz
 sudo ln -sf /opt/nvim/bin/nvim /usr/local/bin/nvim
 ```
 
-LazyVim needs `git` (plugin clones) and benefits from `ripgrep` (Telescope
-search); install them if missing:
+LazyVim needs `git` (plugin clones), `ripgrep` (Telescope search), and a C
+toolchain — tree-sitter compiles its parsers with `gcc`/`make` — plus `unzip`:
 
 ```bash
-sudo apt install -y git curl ripgrep
+sudo apt install -y git curl ripgrep build-essential unzip
 ```
+
+## Icons (Nerd Font)
+
+Most LazyVim icons render as □ without a patched Nerd Font. Install one and
+select it in your terminal settings:
+
+```bash
+mkdir -p ~/.local/share/fonts
+wget -c -O /tmp/JetBrainsMono.zip https://github.com/ryanoasis/nerd-fonts/releases/latest/download/JetBrainsMono.zip
+unzip -o /tmp/JetBrainsMono.zip -d ~/.local/share/fonts
+fc-cache -f
+```
+
+Verify: `fc-list | grep -i 'JetBrainsMono.*Nerd'`. Then set the terminal font to
+`JetBrainsMono Nerd Font` and restart it.
 
 ## LazyVim
 
