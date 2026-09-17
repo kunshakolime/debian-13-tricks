@@ -1,0 +1,193 @@
+#!/bin/bash
+
+WIFI_IFACE=""
+AP_IFACE="ap1"
+AP_IP="192.168.50.1"
+SSID="MyHotspot"
+PASSPHRASE="12345678"
+CHANNEL=""
+hw_mode=""
+MIRACLE_WAS_ACTIVE=false
+
+HOSTAPD_CONF="/tmp/hotspotx-hostapd.conf"
+DNSMASQ_CONF="/tmp/hotspotx-dnsmasq.conf"
+HOSTAPD_LOG="/tmp/hotspotx.log"
+
+usage() {
+    cat <<EOF
+Usage: hotspotx [OPTIONS]
+
+Create a Wi-Fi hotspot (must be run as root).
+
+Options:
+  --ssid NAME       SSID (default: MyHotspot)
+  --pass PASSWORD   WPA2 password (default: 12345678)
+  --iface IFACE     Wi-Fi interface (default: auto-detect)
+  --channel NUM     Channel (default: match current Wi-Fi)
+  --help            Show this help
+EOF
+    exit 0
+}
+
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --ssid)    SSID="$2"; shift 2 ;;
+        --pass)    PASSPHRASE="$2"; shift 2 ;;
+        --iface)   WIFI_IFACE="$2"; shift 2 ;;
+        --channel) CHANNEL="$2"; shift 2 ;;
+        --help)    usage ;;
+        *)         echo "Unknown option: $1"; usage ;;
+    esac
+done
+
+if [[ $EUID -ne 0 ]]; then
+    echo "[-] Must be run as root (sudo ./hotspotx)."
+    exit 1
+fi
+
+if [[ -z "$WIFI_IFACE" ]]; then
+    WIFI_IFACE=$(iw dev 2>/dev/null | awk '/Interface/ && !/ap1/ {print $2; exit}')
+    if [[ -z "$WIFI_IFACE" ]]; then
+        echo "[-] Could not detect Wi-Fi interface. Use --iface."
+        exit 1
+    fi
+fi
+
+# Check dependencies
+deps=(iw iptables hostapd dnsmasq bc)
+missing=()
+for dep in "${deps[@]}"; do
+    command -v "$dep" &>/dev/null || missing+=("$dep")
+done
+if (( ${#missing[@]} )); then
+    echo "[-] Missing: ${missing[*]}"
+    exit 1
+fi
+
+HAS_QR=true
+command -v qrencode &>/dev/null || HAS_QR=false
+
+cleanup() {
+    echo "[*] Cleaning up..."
+    pkill -f "hostapd.*$HOSTAPD_CONF" 2>/dev/null
+    pkill -f "dnsmasq.*$DNSMASQ_CONF" 2>/dev/null
+    iptables -t nat -D POSTROUTING -o "$WIFI_IFACE" -j MASQUERADE -m comment --comment "hotspotx" 2>/dev/null || true
+    iw dev "$AP_IFACE" del 2>/dev/null || true
+    rm -f "$HOSTAPD_CONF" "$DNSMASQ_CONF"
+    rm -f /etc/NetworkManager/conf.d/hotspotx.conf
+    nmcli general reload 2>/dev/null || true
+    if [[ "$MIRACLE_WAS_ACTIVE" == true ]]; then
+        systemctl start miracast-wifid.service 2>/dev/null || true
+    fi
+    echo "[+] Hotspot stopped."
+}
+trap cleanup EXIT
+
+# Detect channel
+if [[ -n "$CHANNEL" ]]; then
+    if (( CHANNEL >= 36 )); then
+        hw_mode="a"
+    else
+        hw_mode="g"
+    fi
+else
+    freq=$(iw dev "$WIFI_IFACE" link 2>/dev/null | awk '/freq:/ {print $2}')
+    if [[ -z "$freq" ]]; then
+        echo "[-] $WIFI_IFACE not connected. Use --channel to specify."
+        exit 1
+    fi
+    echo "[*] Frequency: ${freq} MHz"
+
+    if [[ "$freq" == 2484 ]]; then
+        channel=14
+    elif (( $(echo "$freq < 2484" | bc -l) )); then
+        channel=$(echo "($freq - 2407) / 5" | bc)
+    else
+        channel=$(echo "($freq - 5000) / 5" | bc)
+    fi
+
+    if (( $(echo "$freq < 5000" | bc -l) )); then
+        hw_mode="g"
+    else
+        hw_mode="a"
+    fi
+    CHANNEL=$channel
+fi
+
+# Stop MiracleCast if running
+if systemctl is-active --quiet miracast-wifid.service 2>/dev/null; then
+    MIRACLE_WAS_ACTIVE=true
+    systemctl stop miracast-wifid.service 2>/dev/null || true
+    sleep 1
+fi
+
+echo "[*] Channel: $CHANNEL ($hw_mode)"
+
+# Tell NetworkManager to never manage ap1
+NM_CONF="/etc/NetworkManager/conf.d/hotspotx.conf"
+if [[ ! -f "$NM_CONF" ]]; then
+    mkdir -p /etc/NetworkManager/conf.d
+    printf '[keyfile]\nunmanaged-devices=interface-name:ap1\n' > "$NM_CONF"
+    nmcli general reload 2>/dev/null || true
+    sleep 1
+fi
+
+# Write hostapd config
+cat > "$HOSTAPD_CONF" <<EOF
+interface=$AP_IFACE
+driver=nl80211
+ssid=$SSID
+hw_mode=$hw_mode
+channel=$CHANNEL
+auth_algs=1
+wpa=2
+wpa_passphrase=$PASSPHRASE
+wpa_key_mgmt=WPA-PSK
+rsn_pairwise=CCMP
+ignore_broadcast_ssid=0
+wmm_enabled=1
+ieee80211n=1
+logger_syslog=-1
+logger_stdout=-1
+logger_stdout_level=2
+EOF
+
+# Write dnsmasq config
+cat > "$DNSMASQ_CONF" <<EOF
+interface=$AP_IFACE
+bind-interfaces
+dhcp-range=192.168.50.10,192.168.50.50,12h
+EOF
+
+# Create AP interface
+echo "[*] Creating AP interface..."
+iw dev "$WIFI_IFACE" interface add "$AP_IFACE" type __ap
+nmcli device set "$AP_IFACE" managed no 2>/dev/null || true
+
+echo "[*] Bringing up $AP_IFACE..."
+ip link set "$AP_IFACE" up
+ip addr flush dev "$AP_IFACE"
+ip addr add "$AP_IP/24" dev "$AP_IFACE"
+
+echo "[*] Enabling IP forwarding..."
+sysctl -w net.ipv4.ip_forward=1 >/dev/null
+
+echo "[*] Setting up NAT..."
+iptables -t nat -A POSTROUTING -o "$WIFI_IFACE" -j MASQUERADE -m comment --comment "hotspotx"
+
+echo "[*] Starting dnsmasq..."
+dnsmasq --conf-file="$DNSMASQ_CONF"
+
+echo "[*] Starting hostapd..."
+rm -f "$HOSTAPD_LOG"
+hostapd "$HOSTAPD_CONF" > "$HOSTAPD_LOG" 2>&1 &
+
+echo -e "\033[0;32m[+] Hotspot running!\033[0m SSID: \033[0;36m$SSID\033[0m, Pass: \033[0;36m$PASSPHRASE\033[0m"
+
+if $HAS_QR; then
+    qrencode -t ansiutf8 "WIFI:T:WPA;S:$SSID;P:$PASSPHRASE;;"
+fi
+
+echo -e "\033[1;33m[*] Press Ctrl-C to stop.\033[0m"
+
+while true; do sleep 60; done
