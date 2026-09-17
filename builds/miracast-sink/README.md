@@ -51,7 +51,7 @@ miracast-sink  (GTK4/Adwaita, C)
 ## Install
 
 ```bash
-sudo apt install https://github.com/kunshakolime/debian-13-tricks/releases/download/miracast-sink-0.3.0/miracast-sink_0.3.0_amd64.deb
+wget -c -O /tmp/miracast-sink_0.3.0_amd64.deb https://github.com/kunshakolime/debian-13-tricks/releases/download/miracast-sink-0.3.0/miracast-sink_0.3.0_amd64.deb && sudo apt install /tmp/miracast-sink_0.3.0_amd64.deb
 ```
 
 ## Usage

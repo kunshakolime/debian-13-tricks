@@ -9,7 +9,7 @@ message translation, and more.
 ## Install
 
 ```bash
-sudo apt install https://github.com/kunshakolime/debian-13-tricks/releases/download/ayugram-7.0.9/ayugram_7.0.9_amd64.deb
+wget -c -O /tmp/ayugram_7.0.9_amd64.deb https://github.com/kunshakolime/debian-13-tricks/releases/download/ayugram-7.0.9/ayugram_7.0.9_amd64.deb && sudo apt install /tmp/ayugram_7.0.9_amd64.deb
 ```
 
 ## Build

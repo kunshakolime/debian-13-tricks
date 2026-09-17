@@ -5,7 +5,7 @@ Display and control your Android device (screen mirroring) over USB or Wi-Fi.
 ## Install
 
 ```bash
-sudo apt install https://github.com/kunshakolime/debian-13-tricks/releases/download/scrcpy-4.1/scrcpy_4.1_amd64.deb
+wget -c -O /tmp/scrcpy_4.1_amd64.deb https://github.com/kunshakolime/debian-13-tricks/releases/download/scrcpy-4.1/scrcpy_4.1_amd64.deb && sudo apt install /tmp/scrcpy_4.1_amd64.deb
 ```
 
 Pulls Debian's `adb` package as a dependency. The adb bundled in the official
