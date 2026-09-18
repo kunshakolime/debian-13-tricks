@@ -1,5 +1,6 @@
 #!/bin/bash
-# Network share manager — WebDAV (HTTP/HTTPS), FTP/FTPS, Samba (SMB), SFTP.
+# Network share manager — WebDAV (HTTP/HTTPS), FTP/FTPS (via rclone),
+# Samba (SMB), SFTP.
 #
 #   mount-net add <name>            — add a share (asks a few questions)
 #   mount-net add <type> <source> <name> [mountpoint] [--user u] [--pass p] [--vers v]
@@ -18,15 +19,35 @@
 #                                     mount right now it's saved anyway (warning shown)
 #
 # Everything is written for you as systemd .mount/.automount units
-# (/mnt/<name>); credentials are stored root-only (ftp embeds its password in
-# the unit file). No config files to hand-edit.
+# (/mnt/<name>); credentials are stored root-only (/etc/davfs2/secrets,
+# /etc/cifs-credentials, /etc/rclone.conf). No config files to hand-edit.
 
 set -e
 
 UNIT_DIR=/etc/systemd/system
 DAV_SECRETS=/etc/davfs2/secrets
 CIFS_CRED_DIR=/etc/cifs-credentials
+RCLONE_CONF=/etc/rclone.conf
+RCLONE_CACHE=/var/cache/rclone
 IDLE_SEC=300
+
+ensure_rclone() {
+    command -v rclone >/dev/null 2>&1 || {
+        echo "error: rclone not found (needed for ftp). Install with: sudo apt install -y rclone"
+        exit 1
+    }
+    # systemd .mount Type=rclone calls /sbin/mount.rclone
+    if [ ! -e /sbin/mount.rclone ]; then
+        sudo ln -sf "$(command -v rclone)" /sbin/mount.rclone
+    fi
+    sudo install -d -m 755 "$RCLONE_CACHE"
+    [ -f "$RCLONE_CONF" ] || sudo touch "$RCLONE_CONF"
+    sudo chmod 600 "$RCLONE_CONF"
+}
+
+rclone_get() {
+    sudo rclone config get "$1" "$2" --config "$RCLONE_CONF" 2>/dev/null || true
+}
 
 unit() {
     local name="$1" f n
@@ -111,7 +132,14 @@ try_mount() {
 }
 
 share_type() {
-    sed -n 's/^Type=//p' "$UNIT_DIR/$(unit "$1").mount" 2>/dev/null || echo ""
+    local f="$UNIT_DIR/$(unit "$1").mount" t d
+    t="$(sed -n 's/^Type=//p' "$f" 2>/dev/null || echo "")"
+    if [ "$t" = "rclone" ]; then
+        d="$(sed -n 's/^Description=\([^ ]*\) network share .*/\1/p' "$f")"
+        echo "rclone-$d"
+    else
+        echo "$t"
+    fi
 }
 
 write_units() {
@@ -324,7 +352,7 @@ EOF
             echo "Run: ssh-copy-id $suser  (then mount will work)" 
             ;;
         ftp)
-            local fhost fpath fscheme
+            local fhost fpath fscheme rhost rport explicit_tls
             if [ -n "$source" ]; then
                 case "$source" in
                     ftp://*|ftps://*)
@@ -352,18 +380,26 @@ EOF
                 read -rp 'Remote path [/]: ' fpath
             fi
             fpath="${fpath:-/}"
+            [[ "$fpath" == /* ]] || fpath="/$fpath"
             [ -n "$user" ] || { read -rp 'Username (blank = anonymous): ' user; [ -n "$user" ] || user="anonymous"; }
             [ -n "$pass" ] || { read -rsp 'Password (blank = none): ' pass; echo; }
-            for v in "$fhost" "$fpath" "$user" "$pass"; do
-                if bad_secret "$v"; then
-                    echo "error: host, path, username and password must not contain spaces or special characters"
-                    exit 1
-                fi
-            done
-            what="$fscheme://$user:$pass@$fhost$fpath"
-            fstype="fuse.curlftpfs"
-            opts="uid=$(id -u),gid=$(id -g),allow_other,_netdev"
-            echo "Note: the $fscheme password is stored in the unit file (readable by all users); use sftp if you need secrecy"
+            # rclone obscures the password in /etc/rclone.conf, so spaces and
+            # special characters are allowed here (unlike davfs/cifs).
+            rhost="${fhost%%:*}"
+            rport="21"
+            [[ "$fhost" == *:* ]] && rport="${fhost#*:}"
+            explicit_tls="false"
+            [ "$fscheme" = "ftps" ] && explicit_tls="true"
+            [ -n "$rhost" ] || { echo "host required"; exit 1; }
+            ensure_rclone
+            if sudo rclone listremotes --config "$RCLONE_CONF" 2>/dev/null | grep -qx "$name:"; then
+                echo "rclone remote '$name' already exists"; exit 1
+            fi
+            sudo rclone config create "$name" ftp host "$rhost" user "$user" pass "$pass" port "$rport" explicit_tls "$explicit_tls" --config "$RCLONE_CONF" --non-interactive --obscure >/dev/null
+            what="$name:$fpath"
+            fstype="rclone"
+            opts="rw,_netdev,allow_other,args2env,vfs-cache-mode=writes,config=$RCLONE_CONF,cache-dir=$RCLONE_CACHE,uid=$(id -u),gid=$(id -g)"
+            echo "FTP credentials stored obscured in $RCLONE_CONF (root-only)"
             ;;
     esac
 
@@ -396,6 +432,7 @@ edit() {
         cifs)       kind="smb" ;;
         fuse.sshfs) kind="sftp" ;;
         fuse.curlftpfs) kind="ftp" ;;
+        rclone-ftp) kind="ftp" ;;
         *) echo "unknown share type: $type"; exit 1 ;;
     esac
     echo "Editing '$name' ($kind) -> $(mount_loc "$name")"
@@ -499,15 +536,33 @@ EOF
             opts="uid=$(id -u),gid=$(id -g),allow_other,_netdev"
             ;;
         ftp)
-            local fhost fpath fscheme old_what old_rest old_ui old_hp old_host old_path old_user
+            # New shares use rclone (Type=rclone). Old curlftpfs shares
+            # (What=ftp(s)://...) are migrated to rclone on edit.
+            local fhost fpath fscheme scheme old_what old_host old_path old_user old_tls old_pass_legacy
+            local is_legacy=no
             old_what="$(unit_key What "$UNIT_DIR/$u.mount")"
-            fscheme="${old_what%%://*}"
-            old_rest="${old_what#*://}"
-            old_ui="${old_rest%%@*}"
-            old_hp="${old_rest#*@}"
-            old_host="${old_hp%%/*}"
-            if [[ "$old_hp" == */* ]]; then old_path="/${old_hp#*/}"; else old_path="/"; fi
-            old_user="${old_ui%%:*}"
+            if [[ "$old_what" == ftp://* || "$old_what" == ftps://* ]]; then
+                is_legacy=yes
+                fscheme="${old_what%%://*}"
+                local old_rest old_ui old_hp
+                old_rest="${old_what#*://}"
+                old_ui="${old_rest%%@*}"
+                old_hp="${old_rest#*@}"
+                old_host="${old_hp%%/*}"
+                if [[ "$old_hp" == */* ]]; then old_path="/${old_hp#*/}"; else old_path="/"; fi
+                old_user="${old_ui%%:*}"
+                # stash legacy password for "keep current" (visible only to root via unit file)
+                old_pass_legacy="${old_ui#*:}"
+            else
+                # rclone form: What=name:/path
+                old_path="${old_what#*:}"
+                [ -n "$old_path" ] || old_path="/"
+                old_host="$(rclone_get "$name" host)"
+                old_user="$(rclone_get "$name" user)"
+                old_tls="$(rclone_get "$name" explicit_tls)"
+                if [ "$old_tls" = "true" ]; then fscheme="ftps"; else fscheme="ftp"; fi
+                old_pass_legacy=""
+            fi
             read -rp "Scheme (ftp or ftps) [$fscheme]: " scheme
             scheme="${scheme:-$fscheme}"
             case "$scheme" in ftp|ftps) ;; *) echo "unknown scheme: $scheme"; exit 1 ;; esac
@@ -515,19 +570,35 @@ EOF
             fhost="${fhost:-$old_host}"
             read -rp "Remote path [$old_path]: " fpath
             fpath="${fpath:-$old_path}"
+            [[ "$fpath" == /* ]] || fpath="/$fpath"
             read -rp "Username [${old_user:-anonymous}]: " user
             if [ -z "$user" ]; then user="${old_user:-anonymous}"; fi
             read -rsp 'Password (blank = keep current): ' pass; echo
-            if [ -z "$pass" ]; then pass="${old_ui#*:}"; fi
-            for v in "$fhost" "$fpath" "$user" "$pass"; do
-                if bad_secret "$v"; then
-                    echo "error: host, path, username and password must not contain spaces or special characters"
-                    exit 1
+            if [ -z "$pass" ]; then
+                if [ "$is_legacy" = yes ]; then
+                    pass="$old_pass_legacy"
+                else
+                    echo "keeping existing obscured password in $RCLONE_CONF"
                 fi
-            done
-            what="$scheme://$user:$pass@$fhost$fpath"
-            fstype="fuse.curlftpfs"
-            opts="uid=$(id -u),gid=$(id -g),allow_other,_netdev"
+            fi
+            local rhost rport explicit_tls
+            rhost="${fhost%%:*}"
+            rport="21"
+            [[ "$fhost" == *:* ]] && rport="${fhost#*:}"
+            explicit_tls="false"
+            [ "$scheme" = "ftps" ] && explicit_tls="true"
+            ensure_rclone
+            if [ "$is_legacy" = yes ]; then
+                sudo rclone config delete "$name" --config "$RCLONE_CONF" 2>/dev/null || true
+                sudo rclone config create "$name" ftp host "$rhost" user "$user" pass "$pass" port "$rport" explicit_tls "$explicit_tls" --config "$RCLONE_CONF" --non-interactive --obscure >/dev/null
+            elif [ -n "$pass" ]; then
+                sudo rclone config update "$name" host "$rhost" user "$user" port "$rport" explicit_tls "$explicit_tls" pass "$pass" --config "$RCLONE_CONF" --non-interactive --obscure >/dev/null
+            else
+                sudo rclone config update "$name" host "$rhost" user "$user" port "$rport" explicit_tls "$explicit_tls" --config "$RCLONE_CONF" --non-interactive >/dev/null
+            fi
+            what="$name:$fpath"
+            fstype="rclone"
+            opts="rw,_netdev,allow_other,args2env,vfs-cache-mode=writes,config=$RCLONE_CONF,cache-dir=$RCLONE_CACHE,uid=$(id -u),gid=$(id -g)"
             ;;
         *)
             echo "unknown share type: $type"; exit 1
@@ -581,6 +652,9 @@ remove_share() {
     sudo rm -f "$UNIT_DIR/$u.automount" "$UNIT_DIR/$u.mount"
     sudo systemctl daemon-reload
     sudo rm -f "$CIFS_CRED_DIR/$name"
+    if [ "$type" = "rclone-ftp" ]; then
+        sudo rclone config delete "$name" --config "$RCLONE_CONF" 2>/dev/null || true
+    fi
     if [ "$type" = "davfs" ] && [ -n "$what" ] && [ -f "$DAV_SECRETS" ]; then
         local tmp="$(sudo mktemp /tmp/dav-secrets.XXXXXX)"
         trap 'sudo rm -f "$tmp"' EXIT

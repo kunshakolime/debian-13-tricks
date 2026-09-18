@@ -1,19 +1,18 @@
 # mount-net — systemd network share manager
 
-Adds WebDAV (HTTP/HTTPS), FTP/FTPS, Samba (SMB) and SFTP shares as systemd
+Adds WebDAV (HTTP/HTTPS), FTP/FTPS (via rclone), Samba (SMB) and SFTP shares as systemd
 `.mount`/`.automount` units — no fstab, no manual config. Credentials are
-stored root-only (`/etc/davfs2/secrets`, `/etc/cifs-credentials`); ftp embeds
-its password in the unit file.
+stored root-only (`/etc/davfs2/secrets`, `/etc/cifs-credentials`, `/etc/rclone.conf`).
 
 ## Install
 
 ```bash
-sudo apt install -y davfs2 cifs-utils sshfs curlftpfs
+sudo apt install -y davfs2 cifs-utils sshfs rclone
 sudo curl -fsSL https://raw.githubusercontent.com/kunshakolime/debian-13-tricks/main/setups/mount-net/mount-net -o /usr/local/bin/mount-net && sudo chmod +x /usr/local/bin/mount-net
 ```
 
 Installs the backends — `davfs2` (webdav), `cifs-utils` (smb), `sshfs` (sftp),
-`curlftpfs` (ftp) — plus the `mount-net` script to `/usr/local/bin`.
+`rclone` (ftp/ftps) — plus the `mount-net` script to `/usr/local/bin`.
 
 ## Usage
 
