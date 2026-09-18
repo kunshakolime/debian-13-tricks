@@ -63,22 +63,29 @@ apktool d X.apk → edit smali → apktool b → zipalign → apksigner sign
 
 ## Flutter minimal APK build
 
-Base deps (`curl git unzip xz-utils zip libglu1-mesa`) and JDK 21 are already on trixie. Skip Android Studio, Linux-desktop toolchain (`clang/cmake/ninja`), Chrome, emulator, NDK.
+Base deps (`curl git unzip xz-utils zip libglu1-mesa`) and JDK 21 are already on trixie. Skip Android Studio, Linux-desktop toolchain (`clang/cmake/ninja`), Chrome, emulator, NDK. System-wide paths so all users share one install.
 
 ```bash
-git clone https://github.com/flutter/flutter.git -b stable ~/flutter
-export PATH="$PATH:$HOME/flutter/bin"
+# 1. Flutter SDK (most important, includes Dart)
+sudo git clone https://github.com/flutter/flutter.git -b stable /opt/flutter
+sudo chown -R root:root /opt/flutter
+echo 'export PATH="$PATH:/opt/flutter/bin"' | sudo tee /etc/profile.d/flutter.sh
+export PATH="$PATH:/opt/flutter/bin"
 flutter precache --android
 
-mkdir -p ~/Android/Sdk/cmdline-tools
+# 2. Android SDK cmdline-tools (required to build)
+sudo mkdir -p /opt/android-sdk/cmdline-tools
 curl -o /tmp/tools.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
-unzip /tmp/tools.zip -d ~/Android/Sdk/cmdline-tools
-mv ~/Android/Sdk/cmdline-tools/cmdline-tools ~/Android/Sdk/cmdline-tools/latest
-export ANDROID_HOME=$HOME/Android/Sdk
-export PATH="$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools"
+sudo unzip /tmp/tools.zip -d /opt/android-sdk/cmdline-tools
+sudo mv /opt/android-sdk/cmdline-tools/cmdline-tools /opt/android-sdk/cmdline-tools/latest
+echo 'export ANDROID_HOME=/opt/android-sdk' | sudo tee -a /etc/profile.d/flutter.sh
+echo 'export PATH="$PATH:/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools"' | sudo tee -a /etc/profile.d/flutter.sh
+export ANDROID_HOME=/opt/android-sdk
+export PATH="$PATH:/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools"
 
-sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
-flutter config --android-sdk $ANDROID_HOME
+# 3. SDK packages, most important first
+sudo sdkmanager --sdk_root=/opt/android-sdk "platforms;android-36" "build-tools;36.0.0" "platform-tools"
+flutter config --android-sdk /opt/android-sdk
 yes | flutter doctor --android-licenses
 flutter doctor
 
