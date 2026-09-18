@@ -81,7 +81,7 @@ yes | sudo /opt/android-sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=/opt/
 
 ### First APK (manual, no Gradle)
 
-`aapt2`/`zipalign`/`apksigner`/`adb` come from apt (`aapt` via `apktool`, rest direct) — no SDK duplicates. From the SDK only `android.jar` + `d8` are used.
+`zipalign`/`apksigner`/`adb` come from apt — no SDK duplicates. From the SDK: `android.jar` + `d8` + `aapt2` (system `aapt2` 2.19 can't read API-36 resources, SDK `aapt2` required).
 
 Create these 3 files in your text editor:
 
@@ -115,8 +115,8 @@ Then build, one step at a time (literal paths, no variables to lose between term
 
 ```bash
 mkdir -p ~/hello/{dex,classes,gen}
-aapt2 compile --dir ~/hello/res -o ~/hello/compiled.zip
-aapt2 link -o ~/hello/base.apk --manifest ~/hello/AndroidManifest.xml -I /opt/android-sdk/platforms/android-36/android.jar --java ~/hello/gen --min-sdk-version 24 ~/hello/compiled.zip
+/opt/android-sdk/build-tools/36.0.0/aapt2 compile --dir ~/hello/res -o ~/hello/compiled.zip
+/opt/android-sdk/build-tools/36.0.0/aapt2 link -o ~/hello/base.apk --manifest ~/hello/AndroidManifest.xml -I /opt/android-sdk/platforms/android-36/android.jar --java ~/hello/gen --min-sdk-version 24 ~/hello/compiled.zip
 javac -cp /opt/android-sdk/platforms/android-36/android.jar -d ~/hello/classes $(find ~/hello/src ~/hello/gen -name '*.java')
 /opt/android-sdk/build-tools/36.0.0/d8 --lib /opt/android-sdk/platforms/android-36/android.jar --output ~/hello/dex $(find ~/hello/classes -name '*.class')
 (cd ~/hello && zip -j base.apk dex/classes.dex)
