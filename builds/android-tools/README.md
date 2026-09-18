@@ -63,9 +63,10 @@ apktool d X.apk → edit smali → apktool b → zipalign → apksigner sign
 
 ## Minimal APK build (native, required)
 
-Shared base for native and Flutter. JDK 21 and `curl/unzip/zip` already on trixie. System-wide so all users share one install.
+Shared base for native and Flutter. `curl/unzip/zip` already on trixie. Needs a JDK for `javac` (trixie ships only the JRE) and `aapt` for `aapt2`. System-wide so all users share one install.
 
 ```bash
+sudo apt install -y openjdk-21-jdk-headless aapt
 sudo mkdir -p /opt/android-sdk/cmdline-tools
 wget -c https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O /tmp/tools.zip # ~150MB, resumable
 sudo unzip /tmp/tools.zip -d /opt/android-sdk/cmdline-tools # ~350MB extracted
