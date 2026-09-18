@@ -71,11 +71,11 @@ wget -c https://dl.google.com/android/repository/commandlinetools-linux-11076708
 sudo unzip /tmp/tools.zip -d /opt/android-sdk/cmdline-tools # ~350MB extracted
 sudo mv /opt/android-sdk/cmdline-tools/cmdline-tools /opt/android-sdk/cmdline-tools/latest
 echo 'export ANDROID_HOME=/opt/android-sdk' | sudo tee /etc/profile.d/android.sh
-echo 'export PATH="$PATH:/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools"' | sudo tee -a /etc/profile.d/android.sh
+echo 'export PATH="$PATH:/opt/android-sdk/cmdline-tools/latest/bin"' | sudo tee -a /etc/profile.d/android.sh
 export ANDROID_HOME=/opt/android-sdk
-export PATH="$PATH:/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools"
+export PATH="$PATH:/opt/android-sdk/cmdline-tools/latest/bin" # sdkmanager only; adb comes from apt, no SDK platform-tools needed
 
-sudo /opt/android-sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=/opt/android-sdk "platforms;android-36" "build-tools;36.0.0" "platform-tools" # ~65MB + ~55MB + ~15MB
+sudo /opt/android-sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=/opt/android-sdk "platforms;android-36" "build-tools;36.0.0" # ~65MB + ~55MB
 yes | sudo /opt/android-sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=/opt/android-sdk --licenses
 ```
 
