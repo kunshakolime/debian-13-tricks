@@ -39,7 +39,7 @@ Debian provides `adb`, `fastboot`, `simg2img`, `img2simg`, `append2simg` as depe
 ## Extra APK tools (not in our package)
 
 ```bash
-sudo apt install unzip zip apksigner zipalign apktool
+sudo apt install unzip zip apksigner zipalign apktool aapt
 # jadx: https://github.com/skylot/jadx/releases
 ```
 
@@ -75,11 +75,13 @@ echo 'export PATH="$PATH:/opt/android-sdk/cmdline-tools/latest/bin"' | sudo tee 
 export ANDROID_HOME=/opt/android-sdk
 export PATH="$PATH:/opt/android-sdk/cmdline-tools/latest/bin" # sdkmanager only; adb comes from apt, no SDK platform-tools needed
 
-sudo /opt/android-sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=/opt/android-sdk "platforms;android-36" "build-tools;36.0.0" # ~65MB + ~55MB
+sudo /opt/android-sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=/opt/android-sdk "platforms;android-36" "build-tools;36.0.0" # ~65MB + ~55MB; only android.jar + d8 used from it, rest comes from apt
 yes | sudo /opt/android-sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=/opt/android-sdk --licenses
 ```
 
 ### First APK (manual, no Gradle)
+
+`aapt2`/`zipalign`/`apksigner`/`adb` come from apt (`aapt` via `apktool`, rest direct) — no SDK duplicates. From the SDK only `android.jar` + `d8` are used.
 
 Create these 3 files in your text editor:
 
@@ -115,8 +117,8 @@ Then build, one step at a time:
 BT=/opt/android-sdk/build-tools/36.0.0
 API=/opt/android-sdk/platforms/android-36/android.jar
 mkdir -p ~/hello/{dex,classes,gen}
-$BT/aapt2 compile --dir ~/hello/res -o ~/hello/compiled.zip
-$BT/aapt2 link -o ~/hello/base.apk --manifest ~/hello/AndroidManifest.xml -I $API --java ~/hello/gen --min-sdk-version 24 ~/hello/compiled.zip
+aapt2 compile --dir ~/hello/res -o ~/hello/compiled.zip
+aapt2 link -o ~/hello/base.apk --manifest ~/hello/AndroidManifest.xml -I $API --java ~/hello/gen --min-sdk-version 24 ~/hello/compiled.zip
 javac -cp $API -d ~/hello/classes $(find ~/hello/src ~/hello/gen -name '*.java')
 $BT/d8 --lib $API --output ~/hello/dex $(find ~/hello/classes -name '*.class')
 (cd ~/hello && zip -j base.apk dex/classes.dex)
