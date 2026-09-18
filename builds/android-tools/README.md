@@ -79,6 +79,53 @@ sudo /opt/android-sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=/opt/androi
 yes | sudo /opt/android-sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=/opt/android-sdk --licenses
 ```
 
+### First APK (manual, no Gradle)
+
+Create these 3 files in your text editor:
+
+`~/hello/AndroidManifest.xml`
+```xml
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" package="com.example.hello">
+  <application android:label="Hello">
+    <activity android:name=".MainActivity" android:exported="true">
+      <intent-filter><action android:name="android.intent.action.MAIN"/>
+      <category android:name="android.intent.category.LAUNCHER"/></intent-filter>
+    </activity>
+  </application>
+</manifest>
+```
+
+`~/hello/src/com/example/hello/MainActivity.java`
+```java
+package com.example.hello;
+import android.app.Activity; import android.os.Bundle; import android.widget.TextView;
+public class MainActivity extends Activity {
+  protected void onCreate(Bundle b) { super.onCreate(b); TextView t = new TextView(this); t.setText("Hello"); setContentView(t); }
+}
+```
+
+`~/hello/res/values/strings.xml`
+```xml
+<resources><string name="app_name">Hello</string></resources>
+```
+
+Then build, one step at a time:
+
+```bash
+BT=/opt/android-sdk/build-tools/36.0.0
+API=/opt/android-sdk/platforms/android-36/android.jar
+mkdir -p ~/hello/{dex,classes,gen}
+$BT/aapt2 compile --dir ~/hello/res -o ~/hello/compiled.zip
+$BT/aapt2 link -o ~/hello/base.apk --manifest ~/hello/AndroidManifest.xml -I $API --java ~/hello/gen --min-sdk-version 24 ~/hello/compiled.zip
+javac -cp $API -d ~/hello/classes $(find ~/hello/src ~/hello/gen -name '*.java')
+$BT/d8 --lib $API --output ~/hello/dex $(find ~/hello/classes -name '*.class')
+(cd ~/hello && zip -j base.apk dex/classes.dex)
+zipalign -f -p 4 ~/hello/base.apk ~/hello/hello.apk
+keytool -genkey -keystore ~/.android/debug.keystore -alias androiddebugkey -storepass android -keypass android -keyalg RSA -validity 10000 -dname "CN=Android Debug,O=Android,C=US" # once
+apksigner sign --ks ~/.android/debug.keystore --ks-pass pass:android --key-pass pass:android ~/hello/hello.apk
+adb install -r ~/hello/hello.apk
+```
+
 ## Flutter (optional, reuses SDK above)
 
 Only needed for cross-platform Dart apps. Native APKs stay in dex/smali (patchable); Flutter compiles to `libapp.so` (not `baksmali`-patchable).
