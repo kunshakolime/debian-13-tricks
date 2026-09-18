@@ -75,8 +75,8 @@ echo 'export PATH="$PATH:/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-
 export ANDROID_HOME=/opt/android-sdk
 export PATH="$PATH:/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools"
 
-sudo sdkmanager --sdk_root=/opt/android-sdk "platforms;android-36" "build-tools;36.0.0" "platform-tools" # ~65MB + ~55MB + ~15MB
-yes | sdkmanager --sdk_root=/opt/android-sdk --licenses
+sudo /opt/android-sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=/opt/android-sdk "platforms;android-36" "build-tools;36.0.0" "platform-tools" # ~65MB + ~55MB + ~15MB
+yes | sudo /opt/android-sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=/opt/android-sdk --licenses
 ```
 
 ## Flutter (optional, reuses SDK above)
