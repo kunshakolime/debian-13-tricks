@@ -60,3 +60,29 @@ adb install X.apk
 adb logcat -c && adb logcat -v threadtime
 apktool d X.apk → edit smali → apktool b → zipalign → apksigner sign
 ```
+
+## Flutter minimal APK build
+
+Base deps (`curl git unzip xz-utils zip libglu1-mesa`) and JDK 21 are already on trixie. Skip Android Studio, Linux-desktop toolchain (`clang/cmake/ninja`), Chrome, emulator, NDK.
+
+```bash
+git clone https://github.com/flutter/flutter.git -b stable ~/flutter
+export PATH="$PATH:$HOME/flutter/bin"
+flutter precache --android
+
+mkdir -p ~/Android/Sdk/cmdline-tools
+curl -o /tmp/tools.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+unzip /tmp/tools.zip -d ~/Android/Sdk/cmdline-tools
+mv ~/Android/Sdk/cmdline-tools/cmdline-tools ~/Android/Sdk/cmdline-tools/latest
+export ANDROID_HOME=$HOME/Android/Sdk
+export PATH="$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools"
+
+sdkmanager "platform-tools" "platforms;android-36" "build-tools;36.0.0"
+flutter config --android-sdk $ANDROID_HOME
+yes | flutter doctor --android-licenses
+flutter doctor
+
+flutter create ~/myapp
+flutter build apk --debug # build/app/outputs/flutter-apk/app-debug.apk
+adb install -r build/app/outputs/flutter-apk/app-debug.apk
+```
