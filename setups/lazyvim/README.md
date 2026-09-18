@@ -35,7 +35,7 @@ sudo unzip -o /tmp/JetBrainsMono.zip -d /usr/local/share/fonts
 sudo fc-cache -f
 ```
 
-Then set your terminal font to `JetBrainsMono Nerd Font` and reopen.
+Then set your terminal font to `JetBrainsMono Nerd Font Mono` (enable `Custom font` / disable `Use system font`) and reopen.
 
 ## LazyVim
 
