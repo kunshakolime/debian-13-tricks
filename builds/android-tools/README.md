@@ -75,7 +75,7 @@ flutter precache --android # ~1GB artifacts
 
 # 2. Android SDK cmdline-tools (required to build)
 sudo mkdir -p /opt/android-sdk/cmdline-tools
-curl -o /tmp/tools.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip # ~150MB
+wget -c https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O /tmp/tools.zip # ~150MB, resumable
 sudo unzip /tmp/tools.zip -d /opt/android-sdk/cmdline-tools # ~350MB extracted
 sudo mv /opt/android-sdk/cmdline-tools/cmdline-tools /opt/android-sdk/cmdline-tools/latest
 echo 'export ANDROID_HOME=/opt/android-sdk' | sudo tee -a /etc/profile.d/flutter.sh
