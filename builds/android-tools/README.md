@@ -82,11 +82,11 @@ yes | sudo /opt/android-sdk/cmdline-tools/latest/bin/sdkmanager --sdk_root=/opt/
 
 ### First APK (manual, no Gradle)
 
-`./mkapk.sh` scaffolds + builds. Template files are written only when absent, so edits survive rebuilds.
+`./mkapk.sh` scaffolds a project (incl. its own `build.sh` with editable paths/keys). Files are only written when absent, edits survive.
 
 ```bash
-./mkapk.sh # com.example.hello / Hello / ./hello
-./mkapk.sh com.example.test TestApp ~/testapp # custom package, label, dir
+./mkapk.sh com.example.test TestApp ~/testapp
+~/testapp/build.sh # edit its config block first if needed
 adb install -r ~/testapp/app.apk
 ```
 
