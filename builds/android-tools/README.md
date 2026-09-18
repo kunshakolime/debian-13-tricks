@@ -68,28 +68,28 @@ Base deps (`curl git unzip xz-utils zip libglu1-mesa`) and JDK 21 are already on
 ```bash
 # 1. Flutter SDK (most important, includes Dart)
 sudo git clone https://github.com/flutter/flutter.git -b stable /opt/flutter # ~1.1GB
-sudo chown -R root:root /opt/flutter # 0MB
-echo 'export PATH="$PATH:/opt/flutter/bin"' | sudo tee /etc/profile.d/flutter.sh # 4KB
-export PATH="$PATH:/opt/flutter/bin" # 0MB
+sudo chown -R root:root /opt/flutter
+echo 'export PATH="$PATH:/opt/flutter/bin"' | sudo tee /etc/profile.d/flutter.sh
+export PATH="$PATH:/opt/flutter/bin"
 flutter precache --android # ~1GB artifacts
 
 # 2. Android SDK cmdline-tools (required to build)
-sudo mkdir -p /opt/android-sdk/cmdline-tools # 0MB
-curl -o /tmp/tools.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip # ~150MB download
+sudo mkdir -p /opt/android-sdk/cmdline-tools
+curl -o /tmp/tools.zip https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip # ~150MB
 sudo unzip /tmp/tools.zip -d /opt/android-sdk/cmdline-tools # ~350MB extracted
-sudo mv /opt/android-sdk/cmdline-tools/cmdline-tools /opt/android-sdk/cmdline-tools/latest # 0MB
-echo 'export ANDROID_HOME=/opt/android-sdk' | sudo tee -a /etc/profile.d/flutter.sh # 4KB
-echo 'export PATH="$PATH:/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools"' | sudo tee -a /etc/profile.d/flutter.sh # 4KB
-export ANDROID_HOME=/opt/android-sdk # 0MB
-export PATH="$PATH:/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools" # 0MB
+sudo mv /opt/android-sdk/cmdline-tools/cmdline-tools /opt/android-sdk/cmdline-tools/latest
+echo 'export ANDROID_HOME=/opt/android-sdk' | sudo tee -a /etc/profile.d/flutter.sh
+echo 'export PATH="$PATH:/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools"' | sudo tee -a /etc/profile.d/flutter.sh
+export ANDROID_HOME=/opt/android-sdk
+export PATH="$PATH:/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools"
 
 # 3. SDK packages, most important first
 sudo sdkmanager --sdk_root=/opt/android-sdk "platforms;android-36" "build-tools;36.0.0" "platform-tools" # ~65MB + ~55MB + ~15MB
-flutter config --android-sdk /opt/android-sdk # 0MB
-yes | flutter doctor --android-licenses # 0MB
-flutter doctor # 0MB, first run downloads Gradle ~500MB to ~/.gradle
+flutter config --android-sdk /opt/android-sdk
+yes | flutter doctor --android-licenses
+flutter doctor # first run fetches Gradle ~500MB to ~/.gradle
 
 flutter create ~/myapp # <5MB
-flutter build apk --debug # ~25MB APK, ~/.gradle grows to ~1GB on first build
-adb install -r build/app/outputs/flutter-apk/app-debug.apk # pushes ~25MB to device
+flutter build apk --debug # ~25MB APK
+adb install -r build/app/outputs/flutter-apk/app-debug.apk # ~25MB transfer
 ```
