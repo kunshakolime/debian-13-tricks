@@ -67,8 +67,8 @@ Base deps (`curl git unzip xz-utils zip libglu1-mesa`) and JDK 21 are already on
 
 ```bash
 # 1. Flutter SDK (most important, includes Dart)
-sudo git clone https://github.com/flutter/flutter.git -b stable /opt/flutter # ~1.1GB
-sudo chown -R root:root /opt/flutter
+wget -c https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_3.47.4-stable.tar.xz -O /tmp/flutter.tar.xz # ~1.4GB, resumable
+sudo tar -xf /tmp/flutter.tar.xz -C /opt # ~2.8GB extracted to /opt/flutter
 echo 'export PATH="$PATH:/opt/flutter/bin"' | sudo tee /etc/profile.d/flutter.sh
 export PATH="$PATH:/opt/flutter/bin"
 flutter precache --android # ~1GB artifacts
