@@ -61,30 +61,35 @@ adb logcat -c && adb logcat -v threadtime
 apktool d X.apk → edit smali → apktool b → zipalign → apksigner sign
 ```
 
-## Flutter minimal APK build
+## Minimal APK build (native, required)
 
-Base deps (`curl git unzip xz-utils zip libglu1-mesa`) and JDK 21 are already on trixie. Skip Android Studio, Linux-desktop toolchain (`clang/cmake/ninja`), Chrome, emulator, NDK. System-wide paths so all users share one install.
+Shared base for native and Flutter. JDK 21 and `curl/unzip/zip` already on trixie. System-wide so all users share one install.
 
 ```bash
-# 1. Flutter SDK (most important, includes Dart)
+sudo mkdir -p /opt/android-sdk/cmdline-tools
+wget -c https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O /tmp/tools.zip # ~150MB, resumable
+sudo unzip /tmp/tools.zip -d /opt/android-sdk/cmdline-tools # ~350MB extracted
+sudo mv /opt/android-sdk/cmdline-tools/cmdline-tools /opt/android-sdk/cmdline-tools/latest
+echo 'export ANDROID_HOME=/opt/android-sdk' | sudo tee /etc/profile.d/android.sh
+echo 'export PATH="$PATH:/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools"' | sudo tee -a /etc/profile.d/android.sh
+export ANDROID_HOME=/opt/android-sdk
+export PATH="$PATH:/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools"
+
+sudo sdkmanager --sdk_root=/opt/android-sdk "platforms;android-36" "build-tools;36.0.0" "platform-tools" # ~65MB + ~55MB + ~15MB
+yes | sdkmanager --sdk_root=/opt/android-sdk --licenses
+```
+
+## Flutter (optional, reuses SDK above)
+
+Only needed for cross-platform Dart apps. Native APKs stay in dex/smali (patchable); Flutter compiles to `libapp.so` (not `baksmali`-patchable).
+
+```bash
 wget -c https://storage.googleapis.com/flutter_infra_release/releases/stable/linux/flutter_linux_3.47.4-stable.tar.xz -O /tmp/flutter.tar.xz # ~1.4GB, resumable
 sudo tar -xf /tmp/flutter.tar.xz -C /opt # ~2.8GB extracted to /opt/flutter
 echo 'export PATH="$PATH:/opt/flutter/bin"' | sudo tee /etc/profile.d/flutter.sh
 export PATH="$PATH:/opt/flutter/bin"
 flutter precache --android # ~1GB artifacts
 
-# 2. Android SDK cmdline-tools (required to build)
-sudo mkdir -p /opt/android-sdk/cmdline-tools
-wget -c https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O /tmp/tools.zip # ~150MB, resumable
-sudo unzip /tmp/tools.zip -d /opt/android-sdk/cmdline-tools # ~350MB extracted
-sudo mv /opt/android-sdk/cmdline-tools/cmdline-tools /opt/android-sdk/cmdline-tools/latest
-echo 'export ANDROID_HOME=/opt/android-sdk' | sudo tee -a /etc/profile.d/flutter.sh
-echo 'export PATH="$PATH:/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools"' | sudo tee -a /etc/profile.d/flutter.sh
-export ANDROID_HOME=/opt/android-sdk
-export PATH="$PATH:/opt/android-sdk/cmdline-tools/latest/bin:/opt/android-sdk/platform-tools"
-
-# 3. SDK packages, most important first
-sudo sdkmanager --sdk_root=/opt/android-sdk "platforms;android-36" "build-tools;36.0.0" "platform-tools" # ~65MB + ~55MB + ~15MB
 flutter config --android-sdk /opt/android-sdk
 yes | flutter doctor --android-licenses
 flutter doctor # first run fetches Gradle ~500MB to ~/.gradle
