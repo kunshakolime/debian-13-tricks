@@ -111,16 +111,14 @@ public class MainActivity extends Activity {
 <resources><string name="app_name">Hello</string></resources>
 ```
 
-Then build, one step at a time:
+Then build, one step at a time (literal paths, no variables to lose between terminals):
 
 ```bash
-BT=/opt/android-sdk/build-tools/36.0.0
-API=/opt/android-sdk/platforms/android-36/android.jar
 mkdir -p ~/hello/{dex,classes,gen}
 aapt2 compile --dir ~/hello/res -o ~/hello/compiled.zip
-aapt2 link -o ~/hello/base.apk --manifest ~/hello/AndroidManifest.xml -I $API --java ~/hello/gen --min-sdk-version 24 ~/hello/compiled.zip
-javac -cp $API -d ~/hello/classes $(find ~/hello/src ~/hello/gen -name '*.java')
-$BT/d8 --lib $API --output ~/hello/dex $(find ~/hello/classes -name '*.class')
+aapt2 link -o ~/hello/base.apk --manifest ~/hello/AndroidManifest.xml -I /opt/android-sdk/platforms/android-36/android.jar --java ~/hello/gen --min-sdk-version 24 ~/hello/compiled.zip
+javac -cp /opt/android-sdk/platforms/android-36/android.jar -d ~/hello/classes $(find ~/hello/src ~/hello/gen -name '*.java')
+/opt/android-sdk/build-tools/36.0.0/d8 --lib /opt/android-sdk/platforms/android-36/android.jar --output ~/hello/dex $(find ~/hello/classes -name '*.class')
 (cd ~/hello && zip -j base.apk dex/classes.dex)
 zipalign -f -p 4 ~/hello/base.apk ~/hello/hello.apk
 keytool -genkey -keystore ~/.android/debug.keystore -alias androiddebugkey -storepass android -keypass android -keyalg RSA -validity 10000 -dname "CN=Android Debug,O=Android,C=US" # once
