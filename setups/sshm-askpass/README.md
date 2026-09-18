@@ -6,7 +6,7 @@ ssh's `SSH_ASKPASS`. Unknown hosts prompt on the TTY and offer to save.
 ## Setup (Linux/macOS)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kunshakolime/debian-13-tricks/main/setups/sshm-askpass/setup-sshm-askpass.sh | bash
+curl -fsSL https://raw.githubusercontent.com/kunshakolime/trixie-tricks/main/setups/sshm-askpass/setup-sshm-askpass.sh | bash
 ```
 
 Installs (idempotent): `~/.ssh/askpass.sh`, a `host:password` file
@@ -15,7 +15,7 @@ Installs (idempotent): `~/.ssh/askpass.sh`, a `host:password` file
 ## Setup (Termux/Android)
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/kunshakolime/debian-13-tricks/main/setups/sshm-askpass/setup-sshm-askpass-termux.sh | bash
+curl -fsSL https://raw.githubusercontent.com/kunshakolime/trixie-tricks/main/setups/sshm-askpass/setup-sshm-askpass-termux.sh | bash
 ```
 
 Termux differs from a regular Linux box, so the Termux script also:

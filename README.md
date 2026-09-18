@@ -1,4 +1,4 @@
-# debian-13-tricks
+# trixie-tricks
 
 Tools and configs for Debian 13 (trixie).
 

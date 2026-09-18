@@ -6,7 +6,7 @@ apt-get-style commands for apps that only publish `.deb`s on GitHub Releases
 ## Install
 
 ```bash
-sudo curl -fsSL https://raw.githubusercontent.com/kunshakolime/debian-13-tricks/main/setups/deb-get/setup-deb-get.sh -o /tmp/setup-deb-get.sh && sudo bash /tmp/setup-deb-get.sh
+sudo curl -fsSL https://raw.githubusercontent.com/kunshakolime/trixie-tricks/main/setups/deb-get/setup-deb-get.sh -o /tmp/setup-deb-get.sh && sudo bash /tmp/setup-deb-get.sh
 ```
 
 ## Usage

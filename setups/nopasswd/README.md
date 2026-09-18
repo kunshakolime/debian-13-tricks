@@ -7,7 +7,7 @@ temp file), so sudoers is never left half-written.
 ## Install (one-liner, system-wide)
 
 ```bash
-sudo curl -fsSL https://raw.githubusercontent.com/kunshakolime/debian-13-tricks/main/setups/nopasswd/nopasswd.sh -o /usr/local/bin/nopasswd && sudo chmod +x /usr/local/bin/nopasswd && nopasswd
+sudo curl -fsSL https://raw.githubusercontent.com/kunshakolime/trixie-tricks/main/setups/nopasswd/nopasswd.sh -o /usr/local/bin/nopasswd && sudo chmod +x /usr/local/bin/nopasswd && nopasswd
 ```
 
 Installs `nopasswd` to `/usr/local/bin` so any user can toggle their own

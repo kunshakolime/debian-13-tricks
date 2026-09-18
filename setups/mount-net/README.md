@@ -8,7 +8,7 @@ stored root-only (`/etc/davfs2/secrets`, `/etc/cifs-credentials`, `/etc/rclone.c
 
 ```bash
 sudo apt install -y davfs2 cifs-utils sshfs rclone
-sudo curl -fsSL https://raw.githubusercontent.com/kunshakolime/debian-13-tricks/main/setups/mount-net/mount-net -o /usr/local/bin/mount-net && sudo chmod +x /usr/local/bin/mount-net
+sudo curl -fsSL https://raw.githubusercontent.com/kunshakolime/trixie-tricks/main/setups/mount-net/mount-net -o /usr/local/bin/mount-net && sudo chmod +x /usr/local/bin/mount-net
 ```
 
 Installs the backends — `davfs2` (webdav), `cifs-utils` (smb), `sshfs` (sftp),

@@ -9,7 +9,7 @@ package fills the gap without replacing distro packages.
 ## Install
 
 ```bash
-wget -c -O /tmp/android-tools_37.0.0_amd64.deb https://github.com/kunshakolime/debian-13-tricks/releases/download/android-tools-37.0.0/android-tools_37.0.0_amd64.deb && sudo apt install /tmp/android-tools_37.0.0_amd64.deb
+wget -c -O /tmp/android-tools_37.0.0_amd64.deb https://github.com/kunshakolime/trixie-tricks/releases/download/android-tools-37.0.0/android-tools_37.0.0_amd64.deb && sudo apt install /tmp/android-tools_37.0.0_amd64.deb
 ```
 
 ## Build
